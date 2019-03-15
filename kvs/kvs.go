@@ -15,13 +15,13 @@ type Store interface {
 // This struct contains a Key-Value pair update.
 type Update struct {
 	// The key from the key-value pair.
-	key string
+	Key string
 
 	// The new value, or nil if the pair is being deleted.
-	value *string
+	Value *string
 
 	// The previous value, or nil if the pair is being created.
-	previous *string
+	Previous *string
 }
 
 // This interface provides synchronization capability.
