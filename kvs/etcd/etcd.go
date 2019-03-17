@@ -62,6 +62,17 @@ func (etcd *Etcd) Delete(c context.Context, key string) error {
 	return err
 }
 
+func (etcd *Etcd) Get(c context.Context, key string) (string, error) {
+	r, err := etcd.kapi.Get(c, key, nil)
+	if err != nil {
+		return "", err
+	}
+	if r.Node == nil {
+		return "", kvs.ErrNoSuchKey
+	}
+	return r.Node.Value, nil
+}
+
 func (etcd *Etcd) Next(c context.Context) (*kvs.Update, error) {
 	if etcd.err != nil {
 		// We had an error, just return it
