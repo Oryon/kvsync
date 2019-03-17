@@ -33,3 +33,12 @@ type Sync interface {
 	// There is no assumption over the order updates are returned.
 	Next(c context.Context) (*Update, error)
 }
+
+// This interface provides a way to get the value for a certain key
+type Get interface {
+	// Get method returns the value associated with the key (and true),
+	// or an empty string (and false) when there is no such stored key.
+	// Careful, the value returned by get might be out of sync with
+	// 'Next' from the Sync interface.
+	Get(c context.Context, key string) (string, bool)
+}
