@@ -4,6 +4,7 @@ package kvs
 
 import (
 	"context"
+	"errors"
 )
 
 // This interface provides basic functionality to read from a Key-Value store.
@@ -34,11 +35,12 @@ type Sync interface {
 	Next(c context.Context) (*Update, error)
 }
 
+var ErrNoSuchKey = errors.New("No such key")
+
 // This interface provides a way to get the value for a certain key
 type Get interface {
-	// Get method returns the value associated with the key (and true),
-	// or an empty string (and false) when there is no such stored key.
-	// Careful, the value returned by get might be out of sync with
-	// 'Next' from the Sync interface.
-	Get(c context.Context, key string) (string, bool)
+	// Get method returns the value associated with the key.
+	// If the key can't be found, ErrNoSuchKey is returned as error.
+	// Other errors might be returned depending on the underlying storage.
+	Get(c context.Context, key string) (string, error)
 }
