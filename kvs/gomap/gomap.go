@@ -102,3 +102,8 @@ func (m *Gomap) Next(c context.Context) (*kvs.Update, error) {
 
 	return nil, fmt.Errorf("Next not implemented")
 }
+
+func (m *Gomap) Get(c context.Context, key string) (string, bool) {
+	v, ok := m.gomap[key]
+	return v, ok
+}
