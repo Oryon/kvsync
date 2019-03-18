@@ -23,8 +23,8 @@ func TestBasic(t *testing.T) {
 	}
 }
 
-func testEncode(t *testing.T, key string, obj interface{}, truth map[string]string) {
-	m, e := Encode(key, obj)
+func testEncode(t *testing.T, key string, obj interface{}, truth map[string]string, fields ...interface{}) {
+	m, e := Encode(key, obj, fields...)
 	if e != nil {
 		t.Errorf("Encode returned %v", e)
 	}
@@ -66,4 +66,16 @@ func TestJSONMArshall(t *testing.T) {
 
 	testEncode(t, "/here/", &o2, c)
 	testEncode(t, "/here/", o2, c)
+
+	c = make(map[string]string)
+	c["/here/sub/A"] = "1"
+	c["/here/sub/B"] = "\"test\""
+	c["/here/sub/C"] = "3.3"
+	testEncode(t, "/here/", &o2, c, "B")
+	testEncode(t, "/here/", o2, c, "B")
+
+	c = make(map[string]string)
+	c["/here/custom"] = "{\"A\":1,\"B\":\"test\",\"C\":3.3}"
+	testEncode(t, "/here/", &o2, c, "A")
+	testEncode(t, "/here/", o2, c, "A")
 }

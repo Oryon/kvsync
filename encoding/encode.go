@@ -10,6 +10,8 @@ import (
 )
 
 var ErrFirstSlash = errors.New("Key must start with /")
+var ErrWrongFieldType = errors.New("Provided field is of wrong type")
+var ErrWrongFieldName = errors.New("Provided field does not exist")
 var errNotImplemented = errors.New("Not implemented")
 var errUnsupportedType = errors.New("Object type not supported")
 
@@ -31,6 +33,18 @@ func (state *encodeState) encodeJson(key string, object interface{}) error {
 	return nil
 }
 
+func appendStructField(dir string, f reflect.StructField) (string, error) {
+	tag := f.Tag.Get("kvs")
+	if tag == "" {
+		dir = dir + f.Name
+	} else if tag[:1] == "/" {
+		return "", fmt.Errorf("tag must not start with /")
+	} else {
+		dir = dir + tag
+	}
+	return dir, nil
+}
+
 func (state *encodeState) encodeStruct(dir string, v reflect.Value) error {
 	t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
@@ -40,17 +54,12 @@ func (state *encodeState) encodeStruct(dir string, v reflect.Value) error {
 			continue
 		}
 
-		tag := f.Tag.Get("kvs")
-		key := dir
-		if tag == "" {
-			key = key + f.Name
-		} else if tag[:1] == "/" {
-			return fmt.Errorf("tag must not start with /")
-		} else {
-			key = key + tag
+		dir, err := appendStructField(dir, f)
+		if err != nil {
+			return err
 		}
 
-		err := state.encode(key, v.Field(i).Interface())
+		err = state.encode(dir, v.Field(i).Interface())
 		if err != nil {
 			return err
 		}
@@ -95,15 +104,85 @@ func (state *encodeState) encode(root string, object interface{}) error {
 	return errNotImplemented
 }
 
-func Encode(key string, object interface{}) (map[string]string, error) {
+func goDownStruct(key string, v reflect.Value, field interface{}) (string, interface{}, error) {
+	name, ok := field.(string)
+	if !ok {
+		return "", nil, ErrWrongFieldType
+	}
+
+	f, ok := v.Type().FieldByName(name)
+	if !ok {
+		return "", nil, ErrWrongFieldName
+	}
+	key, err := appendStructField(key, f)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return key, v.FieldByIndex(f.Index).Interface(), nil
+}
+
+// Goes down into the object by one step
+func goDown(key string, object interface{}, field interface{}) (string, interface{}, error) {
+	v := reflect.ValueOf(object)
+	switch v.Type().Kind() {
+	case reflect.Struct:
+		return goDownStruct(key, v, field)
+	case reflect.Map:
+		return "", nil, errNotImplemented
+	case reflect.Slice:
+		return "", nil, errNotImplemented
+	case reflect.Array:
+		return "", nil, errNotImplemented
+	case reflect.Ptr:
+		return goDown(key, v.Elem().Interface(), field)
+	default:
+		return "", nil, fmt.Errorf("Unsupported type %v", v.Type().Kind())
+	}
+}
+
+// Goes directely down an object
+func find(key string, object interface{}, fields ...interface{}) (string, interface{}, error) {
+	if len(fields) == 0 {
+		// This is the end of the journey, buddy.
+		return key, object, nil
+	}
+
+	if key[len(key)-1:] != "/" {
+		// This object is meant to be encoded as JSON at the given position
+		return key, object, nil
+	}
+
+	key, object, err := goDown(key, object, fields[0])
+	if err != nil {
+		return key, object, err
+	}
+
+	fields = fields[1:]
+	return find(key, object, fields...)
+}
+
+// Encode part of the object stored at position key.
+// The subfield is identified by a list of fields.
+// Structure attributes are identified by name (as a string).
+// Slice indexes are identified with integers.
+// Map keys are identified by given an object of the same type than the map key.
+func Encode(key string, object interface{}, fields ...interface{}) (map[string]string, error) {
 	if key[:1] != "/" {
 		return nil, ErrFirstSlash
 	}
 
+	key, object, err := find(key, object, fields...)
+	if err != nil {
+		fmt.Printf("%s %v\n", key, object)
+		return nil, err
+	}
+	fmt.Printf("%s %v\n", key, object)
+
 	state := &encodeState{
 		kvs: make(map[string]string),
 	}
-	err := state.encode(key, object)
+	err = state.encode(key, object)
 	if err != nil {
 		return nil, err
 	}
