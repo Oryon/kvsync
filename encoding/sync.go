@@ -2,7 +2,9 @@ package encoding
 
 import (
 	"context"
+	"fmt"
 	"github.com/Oryon/kvsync/kvs"
+	"strings"
 )
 
 // SyncEvent is used to notify a change on a watched object
@@ -49,18 +51,69 @@ type SyncObject struct {
 }
 
 type Sync struct {
-	Sync    kvs.Sync
-	objects map[string]SyncObject
+	Sync     kvs.Sync
+	objects  map[int]SyncObject
+	next_key int
 }
 
 // Waits until the next change from the storage, updates
 // the objects that are being synchronized, calls the callback,
 // and then returns.
 func (s *Sync) Next(c context.Context) error {
+	s.initIfNot()
+
 	return nil
 }
 
 // Start synchronizing a new object, sending a notification when something changes.
-func (s *Sync) AddObject(o SyncObject) error {
+func (s *Sync) SyncObject(o SyncObject) error {
+	s.initIfNot()
+
+	for _, v := range s.objects {
+		if prefixCollision(o.Key, v.Key) {
+			return fmt.Errorf("Cannot watch objects in overlaping key spaces.")
+		}
+	}
+
+	s.objects[s.next_key] = o
+	s.next_key++ //FIXME: This will not work after loop.
+
+	//TODO: Register watcher on KVS
+
 	return nil
+}
+
+// Start synchronizing a new object, sending a notification when something changes.
+func (s *Sync) UnsyncObject(key string) error {
+	s.initIfNot()
+	for k, v := range s.objects {
+		if v.Key == key {
+			delete(s.objects, k)
+			//TODO: Unregister watcher on KVS
+			return nil
+		}
+	}
+
+	return fmt.Errorf("Key '%s' not found in listeners", key)
+}
+
+func (s *Sync) initIfNot() {
+	if s.objects == nil {
+		s.objects = make(map[int]SyncObject)
+	}
+}
+
+func prefixCollision(key1, key2 string) bool {
+	s1 := strings.Split(key1, "/")
+	s2 := strings.Split(key2, "/")
+	if len(s1) < len(s2) {
+		s1, s2 = s2, s1 //swap works in go
+	}
+
+	for i := range s2 {
+		if s1[i] != s2[i] {
+			return false
+		}
+	}
+	return true
 }
