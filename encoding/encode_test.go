@@ -79,3 +79,53 @@ func TestJSONMArshall(t *testing.T) {
 	testEncode(t, "/here/", &o2, c, "A")
 	testEncode(t, "/here/", o2, c, "A")
 }
+
+type S3 struct {
+	A map[string]string `kvs:"{key}/after"`
+	B map[int]S1        `kvs:"prev/{key}/"`
+	C map[string]string `kvs:"C/"`
+}
+
+func TestMap(t *testing.T) {
+	o := S3{
+		A: make(map[string]string),
+		B: make(map[int]S1),
+		C: make(map[string]string),
+	}
+
+	c := make(map[string]string)
+	testEncode(t, "/here/", o, c, "A")
+	testEncode(t, "/here/", o, c, "B")
+	testEncode(t, "/here/", o, c)
+
+	o.B[1] = S1{
+		A: 4,
+		B: "test2",
+		C: 3.5,
+	}
+
+	testEncode(t, "/here/", o, c, "A")
+
+	c["/here/prev/1/A"] = "4"
+	c["/here/prev/1/B"] = "\"test2\""
+	c["/here/prev/1/C"] = "3.5"
+
+	testEncode(t, "/here/", o, c, "B")
+
+	o.B[4] = S1{
+		A: 0,
+		B: "test3",
+		C: 0,
+	}
+	c["/here/prev/4/A"] = "0"
+	c["/here/prev/4/B"] = "\"test3\""
+	c["/here/prev/4/C"] = "0"
+
+	testEncode(t, "/here/", o, c, "B")
+	testEncode(t, "/here/", o, c)
+
+	o.A["nyu"] = "test6"
+	c["/here/\"nyu\"/after"] = "\"test6\""
+	testEncode(t, "/here/", o, c)
+
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/Oryon/kvsync/kvs"
 	"reflect"
+	"strings"
 )
 
 var ErrFirstSlash = errors.New("Key must start with /")
@@ -45,6 +46,14 @@ func appendStructField(dir string, f reflect.StructField) (string, error) {
 	return dir, nil
 }
 
+func serializeMapKey(v reflect.Value) (string, error) {
+	arr, err := json.Marshal(v.Interface())
+	if err != nil {
+		return "<ERROR>", err
+	}
+	return string(arr), nil
+}
+
 func (state *encodeState) encodeStruct(dir string, v reflect.Value) error {
 	t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
@@ -67,14 +76,61 @@ func (state *encodeState) encodeStruct(dir string, v reflect.Value) error {
 	return nil
 }
 
+// Parses a map key path and returns the string to be set
+// before and after the key string
+func parseMapKey(dir string) []string {
+	split := strings.Split(dir, "{key}")
+	if len(split) == 1 {
+		split[0] = "/" + split[0]
+		split = append(split, "/")
+	}
+	return split
+}
+
+func (state *encodeState) encodeMap(dir string, v reflect.Value) error {
+	split := parseMapKey(dir)
+	for _, k := range v.MapKeys() {
+		key_string, err := serializeMapKey(k)
+		if err != nil {
+			return err
+		}
+
+		key := split[0] + key_string + split[1]
+
+		value := v.MapIndex(k)
+		err = state.encode(key, value.Interface())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (state *encodeState) encodePtr(dir string, v reflect.Value) error {
 	return state.encode(dir, v.Elem().Interface())
+}
+
+func storeAsBlob(root string, object interface{}) bool {
+	v := reflect.ValueOf(object)
+	switch v.Type().Kind() {
+	case reflect.Map:
+		if strings.Contains(root, "{key}") {
+			return false
+		}
+	case reflect.Slice:
+	case reflect.Array:
+		if strings.Contains(root, "{index}") {
+			return false
+		}
+	}
+
+	return root[len(root)-1:] != "/"
 }
 
 // Fills the encodeState with keys and values
 func (state *encodeState) encode(root string, object interface{}) error {
 	// Test if object should be stored recursively or not
-	if root[len(root)-1:] != "/" {
+	if storeAsBlob(root, object) {
 		// Encode the object at the designated key
 		if e := state.encodeJson(root, object); e != nil {
 			return e
@@ -89,7 +145,7 @@ func (state *encodeState) encode(root string, object interface{}) error {
 	case reflect.Struct:
 		return state.encodeStruct(root, v)
 	case reflect.Map:
-		return errNotImplemented
+		return state.encodeMap(root, v)
 	case reflect.Slice:
 		return errNotImplemented
 	case reflect.Array:
@@ -122,6 +178,22 @@ func goDownStruct(key string, v reflect.Value, field interface{}) (string, inter
 	return key, v.FieldByIndex(f.Index).Interface(), nil
 }
 
+func goDownMap(dir string, v reflect.Value, field interface{}) (string, interface{}, error) {
+	key_type := v.Type().Key()
+	k := reflect.ValueOf(field)
+	if k.Type() != key_type {
+		return "", nil, ErrWrongFieldType
+	}
+
+	split := parseMapKey(dir)
+	key_string, err := serializeMapKey(k)
+	if err != nil {
+		return "", nil, err
+	}
+	key := split[0] + key_string + split[1]
+	return key, v.MapIndex(k), nil //TODO: MapIndex will fail if object does not exist
+}
+
 // Goes down into the object by one step
 func goDown(key string, object interface{}, field interface{}) (string, interface{}, error) {
 	v := reflect.ValueOf(object)
@@ -129,7 +201,7 @@ func goDown(key string, object interface{}, field interface{}) (string, interfac
 	case reflect.Struct:
 		return goDownStruct(key, v, field)
 	case reflect.Map:
-		return "", nil, errNotImplemented
+		return goDownMap(key, v, field)
 	case reflect.Slice:
 		return "", nil, errNotImplemented
 	case reflect.Array:
@@ -174,10 +246,8 @@ func Encode(key string, object interface{}, fields ...interface{}) (map[string]s
 
 	key, object, err := find(key, object, fields...)
 	if err != nil {
-		fmt.Printf("%s %v\n", key, object)
 		return nil, err
 	}
-	fmt.Printf("%s %v\n", key, object)
 
 	state := &encodeState{
 		kvs: make(map[string]string),
