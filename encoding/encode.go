@@ -274,7 +274,7 @@ func Encode(key string, object interface{}, fields ...interface{}) (map[string]s
 type objectPath struct {
 
 	// The currently held object
-	object interface{}
+	value reflect.Value
 
 	// The set of specific keys used to arrive to this point
 	keypath []string
@@ -282,8 +282,10 @@ type objectPath struct {
 	// The set of specific fields (attributes names, keys and indexes) used to arrive to this point
 	fields []interface{}
 
-	// When object is a map, array or slice, this points to the format to be used by stored elements
-	// e.g. [ "{key}", "name" , "" ], [ "{key}" ], [ "{index}", "" ]
+	// The key format to be used by the encoded object.
+	// e.g. [ "name" ],  [ "name", "" ],
+	// e.g. for a map [ "{key}", "name" , "" ], [ "{key}" ], [ "{index}", "" ]
+	// e.g. for a list of maps [ "{index}", "name" , "{key}", "" ]
 	format []string
 }
 
@@ -294,7 +296,7 @@ func findByKeyOneStruct(o objectPath, path []string) (objectPath, []string, erro
 		return o, path, fmt.Errorf("Struct object does not expect a format")
 	}
 
-	v := reflect.ValueOf(o.object)
+	v := o.value
 	for i := 0; i < v.Type().NumField(); i++ {
 		f := v.Type().Field(i)
 
@@ -303,7 +305,7 @@ func findByKeyOneStruct(o objectPath, path []string) (objectPath, []string, erro
 			return o, path, err
 		}
 
-		o.object = v.Field(i).Interface()
+		o.value = v.Field(i)
 		o.format = strings.Split(k, "/")
 
 		// Try to search deeper, but do not override current state
@@ -327,8 +329,7 @@ func findByKeyOneMap(o objectPath, path []string) (objectPath, []string, error) 
 	o.format = o.format[1:] // Consume {key} format
 
 	// Consume key
-	v := reflect.ValueOf(o.object)
-	t := reflect.TypeOf(o.object)
+	t := o.value.Type()
 
 	keyvalue, err := unserializeMapKey(path[0], t.Key())
 	if err != nil {
@@ -338,7 +339,7 @@ func findByKeyOneMap(o objectPath, path []string) (objectPath, []string, error) 
 	o.keypath = append(o.keypath, path[0]) // Add object key to keypath
 
 	// Set object to inner object
-	o.object = v.MapIndex(keyvalue).Interface()
+	o.value = o.value.MapIndex(keyvalue)
 
 	// Set field to key object
 	o.fields = append(o.fields, keyvalue.Interface())
@@ -346,7 +347,7 @@ func findByKeyOneMap(o objectPath, path []string) (objectPath, []string, error) 
 	return o, path, nil
 }
 
-func findByKeyOne(o objectPath, path []string) (objectPath, []string, error) {
+func findByKey(o objectPath, path []string) (objectPath, []string, error) {
 
 	// First go through formatting elements
 	for len(o.format) != 0 {
@@ -381,8 +382,7 @@ func findByKeyOne(o objectPath, path []string) (objectPath, []string, error) {
 		return o, path, nil
 	}
 
-	v := reflect.ValueOf(o.object)
-	switch v.Type().Kind() {
+	switch o.value.Type().Kind() {
 	case reflect.Struct:
 		return findByKeyOneStruct(o, path)
 	case reflect.Map:
@@ -392,18 +392,9 @@ func findByKeyOne(o objectPath, path []string) (objectPath, []string, error) {
 	case reflect.Array:
 		return o, nil, errNotImplemented
 	case reflect.Ptr:
-		o.object = v.Elem().Interface()
-		return findByKeyOne(o, path)
+		o.value = o.value.Elem()
+		return findByKey(o, path)
 	default:
-		return o, nil, fmt.Errorf("Unsupported type %v", v.Type().Kind())
+		return o, nil, fmt.Errorf("Unsupported type %v", o.value.Type().Kind())
 	}
-}
-
-// Find a subobject using the key path
-
-func findByKey(o objectPath, path []string) (objectPath, []string, error) {
-	if len(path) == 0 {
-		return o, path, nil
-	}
-	return findByKeyOne(o, path)
 }
