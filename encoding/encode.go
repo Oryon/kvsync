@@ -270,16 +270,18 @@ func Encode(key string, object interface{}, fields ...interface{}) (map[string]s
 	return state.kvs, nil
 }
 
-// State used to parse an object
+// State used to parse an object.
 type objectPath struct {
 
-	// The currently held object
+	// A value pointing to the current object.
 	value reflect.Value
 
-	// The set of specific keys used to arrive to this point
+	// The key path used to reach the current object, but not referring to the
+	// object path itself (see 'format').
 	keypath []string
 
-	// The set of specific fields (attributes names, keys and indexes) used to arrive to this point
+	// The set of specific fields (attributes names, keys and indexes) used
+	// to arrive to this object.
 	fields []interface{}
 
 	// The key format to be used by the encoded object.
@@ -352,19 +354,20 @@ func findByKey(o objectPath, path []string) (objectPath, []string, error) {
 	// First go through formatting elements
 	for len(o.format) != 0 {
 		if o.format[0] == "" {
-			// This element is supposed to be encoded as json right now
-			if len(o.format) != 0 {
+			// This object is supposed to be encoded within the given key path
+			if len(o.format) != 1 {
+				// "" key element must be last
 				return o, nil, fmt.Errorf("Format contains an intermediate space")
 			}
-			if len(path) != 0 {
+			if len(path) != 0 && path[0] != "" {
 				return o, nil, fmt.Errorf("Provided path goes past an encoded object")
 			}
 			return o, nil, nil
 		} else if o.format[0] == "{key}" {
-			//We stop here and can format a map
+			//We stop here and can format a map element
 			break
 		} else if o.format[0] == "{index}" {
-			//We stop here and can format a slice or array
+			//We stop here and can format a slice or array element
 			break
 		} else if len(path) == 0 || o.format[0] != path[0] {
 			// Provided path does not match the expected format
