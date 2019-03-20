@@ -11,6 +11,12 @@ func failIfError(t *testing.T, err error) {
 	}
 }
 
+func failIfErrorDifferent(t *testing.T, err error, expected error) {
+	if err != expected {
+		t.Errorf("Error '%v' differs from expected '%v'", err, expected)
+	}
+}
+
 func failIfNotError(t *testing.T, err error) {
 	if err == nil {
 		t.Errorf("Expected error")

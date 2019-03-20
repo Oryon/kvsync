@@ -1,6 +1,7 @@
 package encoding
 
 import (
+	//"fmt"
 	"reflect"
 	"testing"
 )
@@ -127,5 +128,169 @@ func TestMap(t *testing.T) {
 	o.A["nyu"] = "test6"
 	c["/here/\"nyu\"/after"] = "\"test6\""
 	testEncode(t, "/here/", o, c)
+
+}
+
+type S4 struct {
+	A int `kvs:"A"`
+	B string
+	C float64
+}
+
+type S5 struct {
+	A S4             `kvs:"in/blob"`
+	B S4             `kvs:"sub/path/"`
+	C map[string]*S4 `kvs:"map1/{key}/in/here"`
+	D map[int]*S4    `kvs:"map2/{key}/"`
+}
+
+func testFindByKeyResult(t *testing.T, o1 interface{}, fields1 []interface{}, o2 interface{}, fields2 []interface{}) {
+	if o1 != o2 {
+		t.Errorf("FindByKey returned '%v' instead of '%v'", o1, o2)
+	}
+	if !reflect.DeepEqual(fields1, fields2) {
+		t.Errorf("FindByKey returned '%v' instead of '%v'", fields1, fields2)
+	}
+}
+
+func TestFindByKey0(t *testing.T) {
+	s4 := S4{
+		A: 1,
+		B: "nya",
+		C: 1.2,
+	}
+
+	s := S5{
+		A: s4,
+		B: s4,
+	}
+
+	// S5.A in blob with root
+	o, fields, err := FindByKey(&s, "root/", "root/in/blob")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.A, []interface{}{"A"})
+
+	o, fields, err = FindByKey(&s, "root/", "root/in/blob/")
+	failIfNotError(t, err)
+
+	o, fields, err = FindByKey(&s, "root/", "root/in/blob/nya")
+	failIfErrorDifferent(t, err, errFindPathPastObject)
+
+	o, fields, err = FindByKey(&s, "root/", "rot/in/blob")
+	failIfErrorDifferent(t, err, errFindPathNotFound)
+
+	o, fields, err = FindByKey(&s, "root/", "root/in2/blob")
+	failIfErrorDifferent(t, err, errFindPathNotFound)
+
+	// S5.A in blob without root
+	o, fields, err = FindByKey(&s, "", "in/blob")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.A, []interface{}{"A"})
+
+	o, fields, err = FindByKey(&s, "", "in2/blob")
+	failIfErrorDifferent(t, err, errFindPathNotFound)
+
+	o, fields, err = FindByKey(&s, "", "in/blob/")
+	failIfErrorDifferent(t, err, errFindPathPastObject)
+
+	// S5.B as a subpath without root
+	o, fields, err = FindByKey(&s, "", "sub/path")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.B, []interface{}{"B"})
+
+	o, fields, err = FindByKey(&s, "", "sub/path/")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.B, []interface{}{"B"})
+
+	o, fields, err = FindByKey(&s, "", "sub/")
+	failIfErrorDifferent(t, err, errFindPathNotFound)
+
+	o, fields, err = FindByKey(&s, "", "sub")
+	failIfNotError(t, err)
+
+	o, fields, err = FindByKey(&s, "", "sub/path/A")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.B.A, []interface{}{"B", "A"})
+
+	o, fields, err = FindByKey(&s, "", "sub/path/B")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.B.B, []interface{}{"B", "B"})
+
+	// S5.C as map of elements stored as blobs
+	o, fields, err = FindByKey(&s, "", "map1/")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
+	failIfErrorDifferent(t, err, errFindKeyNotFound)
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/")
+	failIfErrorDifferent(t, err, errFindKeyNotFound)
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/nnn")
+	failIfErrorDifferent(t, err, errFindKeyNotFound)
+
+	s.C = make(map[string]*S4)
+
+	o, fields, err = FindByKey(&s, "", "map1/")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
+	failIfErrorDifferent(t, err, errFindKeyNotFound)
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/")
+	failIfErrorDifferent(t, err, errFindKeyNotFound)
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/nnn")
+	failIfErrorDifferent(t, err, errFindKeyNotFound)
+
+	s.C["testkey"] = &s.A
+
+	o, fields, err = FindByKey(&s, "", "map1/")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
+	failIfErrorDifferent(t, err, errFindPathNotFound)
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/")
+	failIfErrorDifferent(t, err, errFindPathNotFound)
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/in")
+	failIfErrorDifferent(t, err, errFindPathNotFound)
+
+	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/in/here")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, s.C["testkey"], []interface{}{"C", "testkey"})
+
+	s.D = make(map[int]*S4)
+
+	o, fields, err = FindByKey(&s, "", "map2/")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.D, []interface{}{"D"})
+
+	o, fields, err = FindByKey(&s, "", "map2/111")
+	failIfErrorDifferent(t, err, errFindKeyNotFound)
+
+	o, fields, err = FindByKey(&s, "", "map2/111/")
+	failIfErrorDifferent(t, err, errFindKeyNotFound)
+
+	o, fields, err = FindByKey(&s, "", "map2/111/nnn")
+	failIfErrorDifferent(t, err, errFindKeyNotFound)
+
+	s.D[111] = &s.A
+
+	o, fields, err = FindByKey(&s, "", "map2/111")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, s.D[111], []interface{}{"D", 111})
+
+	o, fields, err = FindByKey(&s, "", "map2/111/")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, s.D[111], []interface{}{"D", 111})
+
+	o, fields, err = FindByKey(&s, "", "map2/111/A")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.D[111].A, []interface{}{"D", 111, "A"})
 
 }
