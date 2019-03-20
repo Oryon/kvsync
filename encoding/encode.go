@@ -431,12 +431,21 @@ func findByKey(o objectPath, path []string) (objectPath, []string, error) {
 	}
 }
 
-func FindByKey(o interface{}, format string, subpath string) (interface{}, []interface{}, error) {
+// FindByKey returns a sub-object by following the provided path.
+//
+// 'format' is the provided object key formatting string,
+// equivalent to the attribute 'kvs' tags from struct fields.
+// For most types, providing a format is optional.
+//
+// Note that the provided path should include the format, or specific values
+// used by the format. For instance, if the format is "here/{key}/there/", then
+// the path should start with "here/<some-key-value>/there/".
+func FindByKey(o interface{}, format string, path string) (interface{}, []interface{}, error) {
 	op := objectPath{
 		value:  reflect.ValueOf(o),
 		format: strings.Split(format, "/"),
 	}
-	op, _, err := findByKey(op, strings.Split(subpath, "/"))
+	op, _, err := findByKey(op, strings.Split(path, "/"))
 	if err != nil {
 		return nil, nil, err
 	}
