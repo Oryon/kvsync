@@ -30,8 +30,12 @@ type encodeState struct {
 type objectPath struct {
 
 	// A value pointing to the current object.
-	// Careful, it may be non addressable.
+	// It may be non-addressable or contain a Zero value if the object does not exist currently.
 	value reflect.Value
+
+	// The type of the current object, used to go through the structure hierarchy even when
+	// no value is found.
+	vtype reflect.Type
 
 	// The key path used to reach the current object, but not referring to the
 	// object path itself (see 'format').
@@ -208,7 +212,7 @@ func findByFieldsMap(o objectPath, fields []interface{}) (objectPath, []interfac
 	}
 	o.format = o.format[1:] //Remove "{key}" from format
 
-	key_type := o.value.Type().Key()
+	key_type := o.vtype.Key()
 	key := reflect.ValueOf(fields[0])
 	if key.Type() != key_type {
 		return o, nil, ErrWrongFieldType
@@ -219,21 +223,23 @@ func findByFieldsMap(o objectPath, fields []interface{}) (objectPath, []interfac
 		return o, nil, err
 	}
 
-	v := o.value.MapIndex(key)
-	if !v.IsValid() {
-		//TODO: Add possibility to create the value
-		return o, fields, errFindKeyNotFound
+	if o.value.IsValid() {
+		// When the current value exists, try to lookup the map
+		v := o.value.MapIndex(key)
+		if v.IsValid() {
+			// Set object to inner object
+			// Note: Use of indirect here is probably weird.
+			// It is used to dereference pointers whenever the map stores pointers,
+			// such that the object is addressible.
+			// But it would also work if it does not.
+			o.value = reflect.Indirect(v)
+		}
+		//TODO: Add option to add when non existent
 	}
 
+	o.vtype = o.vtype.Elem()                     // Get type of the element
 	o.keypath = append(o.keypath, keystr)        // Add object key to keypath
 	o.fields = append(o.fields, key.Interface()) // Set field to key object
-
-	// Set object to inner object
-	// Note: Use of indirect here is probably weird.
-	// It is used to dereference pointers whenever the map stores pointers,
-	// such that the object is addressible.
-	// But it would also work if it does not.
-	o.value = reflect.Indirect(v)
 
 	return findByFields(o, fields)
 }
@@ -245,7 +251,7 @@ func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []inter
 	}
 	fields = fields[1:]
 
-	f, ok := o.value.Type().FieldByName(name)
+	f, ok := o.vtype.FieldByName(name)
 	if !ok {
 		return o, nil, ErrWrongFieldName
 	}
@@ -255,7 +261,10 @@ func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []inter
 		return o, fields, err
 	}
 
-	o.value = o.value.FieldByIndex(f.Index)
+	if o.value.IsValid() {
+		o.value = o.value.FieldByIndex(f.Index)
+	}
+	o.vtype = o.vtype.FieldByIndex(f.Index).Type
 	o.format = strings.Split(format, "/")
 	o.fields = append(o.fields, name)
 
@@ -304,7 +313,7 @@ func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}
 		return o, fields, nil
 	}
 
-	switch o.value.Type().Kind() {
+	switch o.vtype.Kind() {
 	case reflect.Struct:
 		return findByFieldsStruct(o, fields)
 	case reflect.Map:
@@ -314,10 +323,13 @@ func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}
 	case reflect.Array:
 		return o, nil, errNotImplemented
 	case reflect.Ptr:
-		o.value = o.value.Elem()
+		if o.value.IsValid() {
+			o.value = o.value.Elem()
+		}
+		o.vtype = o.vtype.Elem()
 		return findByFields(o, fields)
 	default:
-		return o, nil, fmt.Errorf("Unsupported type %v", o.value.Type().Kind())
+		return o, nil, fmt.Errorf("Unsupported type %v", o.vtype.Kind())
 	}
 }
 
@@ -327,12 +339,17 @@ func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}
 func FindByFields(object interface{}, format string, fields ...interface{}) (interface{}, string, string, error) {
 	o := objectPath{
 		value:  reflect.ValueOf(object),
+		vtype:  reflect.TypeOf(object),
 		format: strings.Split(format, "/"),
 	}
 
 	o, _, err := findByFields(o, fields)
 	if err != nil {
 		return nil, "", "", err
+	}
+
+	if !o.value.IsValid() {
+		return nil, "", "", errFindKeyNotFound
 	}
 
 	if !o.value.CanAddr() {
@@ -358,6 +375,7 @@ func Encode(key string, object interface{}, fields ...interface{}) (map[string]s
 
 	o := objectPath{
 		value:   reflect.ValueOf(object),
+		vtype:   reflect.TypeOf(object),
 		format:  keypath[1:],
 		keypath: []string{""},
 	}
@@ -386,15 +404,19 @@ func findByKeyOneStruct(o objectPath, path []string) (objectPath, error) {
 	}
 
 	v := o.value
-	for i := 0; i < v.Type().NumField(); i++ {
-		f := v.Type().Field(i)
+	t := o.vtype
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
 
 		k, err := getStructFieldKey(f)
 		if err != nil {
 			return o, err
 		}
 
-		o.value = v.Field(i)
+		if v.IsValid() {
+			o.value = v.Field(i) // Get field if value exists
+		}
+		o.vtype = f.Type // Get attribute type
 		o.format = strings.Split(k, "/")
 
 		// First see if the format corresponds
@@ -411,38 +433,29 @@ func findByKeyOneStruct(o objectPath, path []string) (objectPath, error) {
 
 // Finds a sub-object inside a map with the provided object format (e.g. {key}, {key}/, {key}/name).
 func findByKeyOneMap(o objectPath, path []string) (objectPath, error) {
-
 	if len(o.format) == 0 || o.format[0] != "{key}" {
-		//TODO: Replace this by a check in caller
 		return o, fmt.Errorf("Map format must contain a '{key}' element")
 	}
 	o.format = o.format[1:] // Consume {key} format
 
 	// Consume key
-	t := o.value.Type()
-
-	keyvalue, err := unserializeMapKey(path[0], t.Key())
+	keyvalue, err := unserializeMapKey(path[0], o.vtype.Key())
 	if err != nil {
 		return o, err
 	}
 
-	v := o.value.MapIndex(keyvalue)
-	if !v.IsValid() {
-		//TODO: Add possibility to create the value
-		return o, errFindKeyNotFound
+	if o.value.IsValid() {
+		// Set object to inner object
+		// Note: Use of indirect here is probably weird.
+		// It is used to dereference pointers whenever the map stores pointers,
+		// such that the object is addressible.
+		// But it would also work if it does not.
+		o.value = o.value.MapIndex(keyvalue)
 	}
 
-	o.keypath = append(o.keypath, path[0]) // Add object key to keypath
-
-	// Set object to inner object
-	// Note: Use of indirect here is probably weird.
-	// It is used to dereference pointers whenever the map stores pointers,
-	// such that the object is addressible.
-	// But it would also work if it does not.
-	o.value = reflect.Indirect(o.value.MapIndex(keyvalue))
-
-	// Set field to key object
-	o.fields = append(o.fields, keyvalue.Interface())
+	o.vtype = o.vtype.Elem()                          // Get the map value type
+	o.keypath = append(o.keypath, path[0])            // Add object key to keypath
+	o.fields = append(o.fields, keyvalue.Interface()) // Set field to key object
 
 	// Iterate within the object
 	return findByKey(o, path[1:])
@@ -498,7 +511,7 @@ func findByKey(o objectPath, path []string) (objectPath, error) {
 		return o, nil
 	}
 
-	switch o.value.Type().Kind() {
+	switch o.vtype.Kind() {
 	case reflect.Struct:
 		return findByKeyOneStruct(o, path)
 	case reflect.Map:
@@ -508,7 +521,10 @@ func findByKey(o objectPath, path []string) (objectPath, error) {
 	case reflect.Array:
 		return o, errNotImplemented
 	case reflect.Ptr:
-		o.value = o.value.Elem()
+		if o.value.IsValid() {
+			o.value = o.value.Elem()
+		}
+		o.vtype = o.vtype.Elem()
 		return findByKey(o, path)
 	default:
 		return o, fmt.Errorf("Unsupported type %v", o.value.Type().Kind())
@@ -527,12 +543,18 @@ func findByKey(o objectPath, path []string) (objectPath, error) {
 func FindByKey(o interface{}, format string, path string) (interface{}, []interface{}, error) {
 	op := objectPath{
 		value:  reflect.ValueOf(o),
+		vtype:  reflect.TypeOf(o),
 		format: strings.Split(format, "/"),
 	}
 	op, err := findByKey(op, strings.Split(path, "/"))
 	if err != nil {
 		return nil, nil, err
 	}
+
+	if !op.value.IsValid() {
+		return nil, nil, errFindKeyNotFound
+	}
+
 	if !op.value.CanAddr() {
 		// If the value is not addressable, return a copy
 		return op.value.Interface(), op.fields, nil
@@ -548,6 +570,7 @@ func FindByKey(o interface{}, format string, path string) (interface{}, []interf
 func Update(object interface{}, format string, keypath string, value string) (interface{}, []interface{}, error) {
 	o := objectPath{
 		value:  reflect.ValueOf(object),
+		vtype:  reflect.TypeOf(object),
 		format: strings.Split(format, "/"),
 	}
 	o, err := findByKey(o, strings.Split(keypath, "/"))

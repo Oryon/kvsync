@@ -223,13 +223,13 @@ func TestFindByKey0(t *testing.T) {
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
-	failIfErrorDifferent(t, err, errFindKeyNotFound)
+	failIfErrorDifferent(t, err, errFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/")
-	failIfErrorDifferent(t, err, errFindKeyNotFound)
+	failIfErrorDifferent(t, err, errFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/nnn")
-	failIfErrorDifferent(t, err, errFindKeyNotFound)
+	failIfErrorDifferent(t, err, errFindPathNotFound)
 
 	s.C = make(map[string]*S4)
 	o, fields, err = FindByKey(&s, "", "map1/")
@@ -237,12 +237,12 @@ func TestFindByKey0(t *testing.T) {
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 
 	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
-	failIfErrorDifferent(t, err, errFindKeyNotFound)
+	failIfErrorDifferent(t, err, errFindPathNotFound)
 	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/")
-	failIfErrorDifferent(t, err, errFindKeyNotFound)
+	failIfErrorDifferent(t, err, errFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/nnn")
-	failIfErrorDifferent(t, err, errFindKeyNotFound)
+	failIfErrorDifferent(t, err, errFindPathNotFound)
 
 	s.C["testkey"] = &s.A
 
@@ -270,13 +270,13 @@ func TestFindByKey0(t *testing.T) {
 	testFindByKeyResult(t, o, fields, &s.D, []interface{}{"D"})
 
 	o, fields, err = FindByKey(&s, "", "map2/111")
-	failIfErrorDifferent(t, err, errFindKeyNotFound)
+	failIfErrorDifferent(t, err, errFindKeyInvalid)
 
 	o, fields, err = FindByKey(&s, "", "map2/111/")
 	failIfErrorDifferent(t, err, errFindKeyNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map2/111/nnn")
-	failIfErrorDifferent(t, err, errFindKeyNotFound)
+	failIfErrorDifferent(t, err, errFindPathNotFound)
 
 	s.D[111] = &s.A
 
@@ -290,5 +290,9 @@ func TestFindByKey0(t *testing.T) {
 	o, fields, err = FindByKey(&s, "", "map2/111/A")
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.D[111].A, []interface{}{"D", 111, "A"})
+
+}
+
+func Testupdate0(t *testing.T) {
 
 }
