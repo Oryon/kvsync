@@ -545,6 +545,20 @@ func FindByKey(o interface{}, format string, path string) (interface{}, []interf
 //
 // Given an object and its format, as well as a (key, value) pair (were key is relative to the object),
 // Update returns the sub-object as described by the provided value, as well as the field path to that sub-object.
-func Update(o interface{}, format string, keypath string, value string) (interface{}, []interface{}, error) {
-	return nil, nil, nil
+func Update(object interface{}, format string, keypath string, value string) (interface{}, []interface{}, error) {
+	o := objectPath{
+		value:  reflect.ValueOf(object),
+		format: strings.Split(format, "/"),
+	}
+	o, err := findByKey(o, strings.Split(keypath, "/"))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	object, err = unserializeValue(value, o.value.Type())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return object, o.fields, nil
 }
