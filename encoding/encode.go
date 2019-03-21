@@ -17,7 +17,7 @@ var errFindPathPastObject = errors.New("Provided path goes past an encoded objec
 var errFindKeyNotFound = errors.New("Key was not found in map")
 var errFindKeyInvalid = errors.New("Invalid key for this object")
 var errFindPathNotFound = errors.New("Object not found at specified path")
-var errNotAddressible = errors.New("Requested object is not addressible")
+var errNotAddressable = errors.New("Requested object is not addressable")
 
 // State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {
@@ -343,10 +343,9 @@ func FindByFields(object interface{}, format string, fields ...interface{}) (int
 	if !o.value.CanAddr() {
 		// Returning a copy if the object is non-addressable
 		return o.value.Interface(), strings.Join(o.keypath, "/"), strings.Join(o.format, "/"), nil
-		//NOTE: Another option would be to return a copy of the value
-		//return nil, "", errNotAddressible
 	}
 
+	// If the value is addressable, return a pointer
 	return o.value.Addr().Interface(), strings.Join(o.keypath, "/"), strings.Join(o.format, "/"), nil
 }
 
@@ -539,8 +538,8 @@ func FindByKey(o interface{}, format string, path string) (interface{}, []interf
 		return nil, nil, err
 	}
 	if !op.value.CanAddr() {
-		//NOTE: Another option would be to return a copy of the value
-		return nil, nil, errNotAddressible
+		// If the value is not addressable, return a copy
+		return op.value.Interface(), op.fields, nil
 	}
 
 	return op.value.Addr().Interface(), op.fields, nil
