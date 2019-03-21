@@ -86,7 +86,7 @@ func TestJSONMArshall(t *testing.T) {
 type S3 struct {
 	A map[string]string `kvs:"{key}/after"`
 	B map[int]S1        `kvs:"prev/{key}/"`
-	C map[string]string `kvs:"C/"`
+	C map[string]string `kvs:"C/{key}/"`
 }
 
 func TestMap(t *testing.T) {
@@ -112,7 +112,6 @@ func TestMap(t *testing.T) {
 	c["/here/prev/1/A"] = "4"
 	c["/here/prev/1/B"] = "\"test2\""
 	c["/here/prev/1/C"] = "3.5"
-
 	testEncode(t, "/here/", o, c, "B")
 
 	o.B[4] = S1{
