@@ -380,9 +380,9 @@ func Encode(key string, object interface{}, fields ...interface{}) (map[string]s
 
 // Find sub-object from struct per its key
 // Returns the found object, the consumed key path
-func findByKeyOneStruct(o objectPath, path []string) (objectPath, []string, error) {
+func findByKeyOneStruct(o objectPath, path []string) (objectPath, error) {
 	if len(o.format) != 1 && o.format[0] != "" {
-		return o, path, fmt.Errorf("Struct object expect [\"\"] format")
+		return o, fmt.Errorf("Struct object expect [\"\"] format")
 	}
 
 	v := o.value
@@ -391,7 +391,7 @@ func findByKeyOneStruct(o objectPath, path []string) (objectPath, []string, erro
 
 		k, err := getStructFieldKey(f)
 		if err != nil {
-			return o, path, err
+			return o, err
 		}
 
 		o.value = v.Field(i)
@@ -406,15 +406,15 @@ func findByKeyOneStruct(o objectPath, path []string) (objectPath, []string, erro
 		}
 		// Let's continue searching
 	}
-	return o, path, errFindPathNotFound
+	return o, errFindPathNotFound
 }
 
 // Finds a sub-object inside a map with the provided object format (e.g. {key}, {key}/, {key}/name).
-func findByKeyOneMap(o objectPath, path []string) (objectPath, []string, error) {
+func findByKeyOneMap(o objectPath, path []string) (objectPath, error) {
 
 	if len(o.format) == 0 || o.format[0] != "{key}" {
 		//TODO: Replace this by a check in caller
-		return o, path, fmt.Errorf("Map format must contain a '{key}' element")
+		return o, fmt.Errorf("Map format must contain a '{key}' element")
 	}
 	o.format = o.format[1:] // Consume {key} format
 
@@ -423,13 +423,13 @@ func findByKeyOneMap(o objectPath, path []string) (objectPath, []string, error) 
 
 	keyvalue, err := unserializeMapKey(path[0], t.Key())
 	if err != nil {
-		return o, path, err
+		return o, err
 	}
 
 	v := o.value.MapIndex(keyvalue)
 	if !v.IsValid() {
 		//TODO: Add possibility to create the value
-		return o, path, errFindKeyNotFound
+		return o, errFindKeyNotFound
 	}
 
 	o.keypath = append(o.keypath, path[0]) // Add object key to keypath
@@ -473,29 +473,29 @@ func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) 
 	return o, path, nil
 }
 
-func findByKey(o objectPath, path []string) (objectPath, []string, error) {
+func findByKey(o objectPath, path []string) (objectPath, error) {
 	// First go through format prefixing element (before "", "{key}" or "{index}")
 	o, path, err := findByKeyFormat(o, path)
 	if err != nil {
-		return o, nil, err
+		return o, err
 	}
 
 	if len(o.format) == 0 {
 		// The object is supposed to be encoded as a blob
 		if len(path) != 0 {
 			// Path is too specific and therefore does not correspond to an encoded object.
-			return o, nil, errFindPathPastObject
+			return o, errFindPathPastObject
 		}
-		return o, nil, nil
+		return o, nil
 	}
 
 	if len(path) == 0 || (path[0] == "" && len(path) != 1) {
 		// We reached the end of the requested path but the object expects more.
-		return o, nil, errFindKeyInvalid
+		return o, errFindKeyInvalid
 	}
 
 	if path[0] == "" {
-		return o, nil, nil
+		return o, nil
 	}
 
 	switch o.value.Type().Kind() {
@@ -504,14 +504,14 @@ func findByKey(o objectPath, path []string) (objectPath, []string, error) {
 	case reflect.Map:
 		return findByKeyOneMap(o, path)
 	case reflect.Slice:
-		return o, nil, errNotImplemented
+		return o, errNotImplemented
 	case reflect.Array:
-		return o, nil, errNotImplemented
+		return o, errNotImplemented
 	case reflect.Ptr:
 		o.value = o.value.Elem()
 		return findByKey(o, path)
 	default:
-		return o, nil, fmt.Errorf("Unsupported type %v", o.value.Type().Kind())
+		return o, fmt.Errorf("Unsupported type %v", o.value.Type().Kind())
 	}
 }
 
@@ -529,7 +529,7 @@ func FindByKey(o interface{}, format string, path string) (interface{}, []interf
 		value:  reflect.ValueOf(o),
 		format: strings.Split(format, "/"),
 	}
-	op, _, err := findByKey(op, strings.Split(path, "/"))
+	op, err := findByKey(op, strings.Split(path, "/"))
 	if err != nil {
 		return nil, nil, err
 	}
