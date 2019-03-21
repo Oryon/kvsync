@@ -62,6 +62,23 @@ func getStructFieldKey(f reflect.StructField) (string, error) {
 	}
 }
 
+func serializeValue(v reflect.Value) (string, error) {
+	arr, err := json.Marshal(v.Interface())
+	if err != nil {
+		return "", err
+	}
+	return string(arr), nil
+}
+
+func unserializeValue(val string, t reflect.Type) (reflect.Value, error) {
+	v := reflect.New(t).Elem()
+	err := json.Unmarshal([]byte(val), v.Addr().Interface())
+	if err != nil {
+		return reflect.Zero(t), err
+	}
+	return v, nil
+}
+
 func serializeMapKey(v reflect.Value) (string, error) {
 	if v.Type().Kind() == reflect.String {
 		return v.Interface().(string), nil
@@ -137,17 +154,17 @@ func (state *encodeState) encodeMap(o objectPath) error {
 }
 
 func (state *encodeState) encodeJson(o objectPath) error {
-	arr, err := json.Marshal(o.value.Interface())
-	if err != nil {
-		return err
-	}
 	key := strings.Join(o.keypath, "/")
-
 	if v, ok := state.kvs[key]; ok {
 		return fmt.Errorf("Key '%s' is already used by value '%s'", key, v)
 	}
 
-	state.kvs[key] = string(arr)
+	val, err := serializeValue(o.value)
+	if err != nil {
+		return err
+	}
+
+	state.kvs[key] = val
 	return nil
 }
 
@@ -522,4 +539,12 @@ func FindByKey(o interface{}, format string, path string) (interface{}, []interf
 	}
 
 	return op.value.Addr().Interface(), op.fields, nil
+}
+
+// Update transforms a (key,value) into an actually modified object.
+//
+// Given an object and its format, as well as a (key, value) pair (were key is relative to the object),
+// Update returns the sub-object as described by the provided value, as well as the field path to that sub-object.
+func Update(o interface{}, format string, keypath string, value string) (interface{}, []interface{}, error) {
+	return nil, nil, nil
 }
