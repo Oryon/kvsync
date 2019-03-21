@@ -15,11 +15,40 @@ var errNotImplemented = errors.New("Not implemented")
 var errUnsupportedType = errors.New("Object type not supported")
 var errFindPathPastObject = errors.New("Provided path goes past an encoded object")
 var errFindKeyNotFound = errors.New("Key was not found in map")
+var errFindKeyInvalid = errors.New("Invalid key for this object")
 var errFindPathNotFound = errors.New("Object not found at specified path")
 var errNotAddressible = errors.New("Requested object is not addressible")
 
+// State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {
 	kvs map[string]string
+}
+
+// State representing an object as well as its path in some parent opbjects.
+// This path is not absolute, and this struct does not keep memory of
+// the path root.
+type objectPath struct {
+
+	// A value pointing to the current object.
+	// Careful, it may be non addressable.
+	value reflect.Value
+
+	// The key path used to reach the current object, but not referring to the
+	// object path itself (see 'format').
+	keypath []string
+
+	// The set of specific fields (attributes names, keys and indexes) used
+	// to arrive to this object.
+	fields []interface{}
+
+	// The key format to be used to encode children of this object
+	// (attributes, map values, array values, etc...).
+	// e.g. [], This object is stored as a JSON blob.
+	// e.g. [""], Attributes of the struct are stored directly following the struct path.
+	// e.g. [ <prefix>... , ""], <prefix> will prefix all attribute paths.
+	// e.g. [ <prefix>... , "{key}", <suffix>... ], map values are stored at "prefix/<key>" using <suffix> format.
+	// e.g. [ <prefix>... , "{index}", <suffix>... ], array or slice values are stored at "prefix/<index>" using <suffix> format.
+	format []string
 }
 
 func (state *encodeState) encodeJson(key string, object interface{}) error {
@@ -354,27 +383,6 @@ func Encode(key string, object interface{}, fields ...interface{}) (map[string]s
 	return state.kvs, nil
 }
 
-// State used to parse an object.
-type objectPath struct {
-
-	// A value pointing to the current object.
-	value reflect.Value
-
-	// The key path used to reach the current object, but not referring to the
-	// object path itself (see 'format').
-	keypath []string
-
-	// The set of specific fields (attributes names, keys and indexes) used
-	// to arrive to this object.
-	fields []interface{}
-
-	// The key format to be used by the encoded object.
-	// e.g. [ "name" ],  [ "name", "" ],
-	// e.g. for a map [ "{key}", "name" , "" ], [ "{key}" ], [ "{index}", "" ]
-	// e.g. for a list of maps [ "{index}", "name" , "{key}", "" ]
-	format []string
-}
-
 // Find sub-object from struct per its key
 // Returns the found object, the consumed key path
 func findByKeyOneStruct(o objectPath, path []string) (objectPath, []string, error) {
@@ -454,11 +462,8 @@ func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) 
 				return o, nil, fmt.Errorf("Format contains an intermediate space")
 			}
 			break
-		} else if o.format[0] == "{key}" {
-			//We stop here and can format a map element
-			break
-		} else if o.format[0] == "{index}" {
-			//We stop here and can format a slice or array element
+		} else if o.format[0] == "{key}" || o.format[0] == "{index}" {
+			//We stop here and can format a map, array or slice element
 			break
 		} else if len(path) == 0 || o.format[0] != path[0] {
 			// Provided path does not match the expected format
@@ -474,7 +479,7 @@ func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) 
 }
 
 func findByKey(o objectPath, path []string) (objectPath, []string, error) {
-	// First go through formatting elements
+	// First go through format prefixing element (before "", "{key}" or "{index}")
 	o, path, err := findByKeyFormat(o, path)
 	if err != nil {
 		return o, nil, err
@@ -483,13 +488,19 @@ func findByKey(o objectPath, path []string) (objectPath, []string, error) {
 	if len(o.format) == 0 {
 		// The object is supposed to be encoded as a blob
 		if len(path) != 0 {
+			// Path is too specific and therefore does not correspond to an encoded object.
 			return o, nil, errFindPathPastObject
 		}
+		return o, nil, nil
 	}
 
-	if len(path) == 0 || (len(path) == 1 && path[0] == "") {
-		// We reached the end of the requested path but there still is some format.
-		return o, path, nil
+	if len(path) == 0 || (path[0] == "" && len(path) != 1) {
+		// We reached the end of the requested path but the object expects more.
+		return o, nil, errFindKeyInvalid
+	}
+
+	if path[0] == "" {
+		return o, nil, nil
 	}
 
 	switch o.value.Type().Kind() {

@@ -148,9 +148,11 @@ type S5 struct {
 
 func testFindByKeyResult(t *testing.T, o1 interface{}, fields1 []interface{}, o2 interface{}, fields2 []interface{}) {
 	if o1 != o2 {
+		fmt.Printf("FAIL::::: FindByKey returned '%v' instead of '%v'\n", o1, o2)
 		t.Errorf("FindByKey returned '%v' instead of '%v'", o1, o2)
 	}
 	if !reflect.DeepEqual(fields1, fields2) {
+		fmt.Printf("FAIL::::: FindByKey returned '%v' instead of '%v'\n", fields1, fields2)
 		t.Errorf("FindByKey returned '%v' instead of '%v'", fields1, fields2)
 	}
 }
@@ -197,8 +199,7 @@ func TestFindByKey0(t *testing.T) {
 
 	// S5.B as a subpath without root
 	o, fields, err = FindByKey(&s, "", "sub/path")
-	failIfError(t, err)
-	testFindByKeyResult(t, o, fields, &s.B, []interface{}{"B"})
+	failIfErrorDifferent(t, err, errFindKeyInvalid)
 
 	o, fields, err = FindByKey(&s, "", "sub/path/")
 	failIfError(t, err)
@@ -222,7 +223,6 @@ func TestFindByKey0(t *testing.T) {
 	o, fields, err = FindByKey(&s, "", "map1/")
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
-
 	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
 	failIfErrorDifferent(t, err, errFindKeyNotFound)
 
@@ -233,14 +233,12 @@ func TestFindByKey0(t *testing.T) {
 	failIfErrorDifferent(t, err, errFindKeyNotFound)
 
 	s.C = make(map[string]*S4)
-
 	o, fields, err = FindByKey(&s, "", "map1/")
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 
 	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
 	failIfErrorDifferent(t, err, errFindKeyNotFound)
-
 	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/")
 	failIfErrorDifferent(t, err, errFindKeyNotFound)
 
@@ -284,8 +282,7 @@ func TestFindByKey0(t *testing.T) {
 	s.D[111] = &s.A
 
 	o, fields, err = FindByKey(&s, "", "map2/111")
-	failIfError(t, err)
-	testFindByKeyResult(t, o, fields, s.D[111], []interface{}{"D", 111})
+	failIfErrorDifferent(t, err, errFindKeyInvalid)
 
 	o, fields, err = FindByKey(&s, "", "map2/111/")
 	failIfError(t, err)
