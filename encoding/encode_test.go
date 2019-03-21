@@ -127,7 +127,7 @@ func TestMap(t *testing.T) {
 	testEncode(t, "/here/", o, c)
 
 	o.A["nyu"] = "test6"
-	c["/here/\"nyu\"/after"] = "\"test6\""
+	c["/here/nyu/after"] = "\"test6\""
 	testEncode(t, "/here/", o, c)
 
 }

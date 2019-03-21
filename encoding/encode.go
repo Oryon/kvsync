@@ -63,6 +63,10 @@ func getStructFieldKey(f reflect.StructField) (string, error) {
 }
 
 func serializeMapKey(v reflect.Value) (string, error) {
+	if v.Type().Kind() == reflect.String {
+		return v.Interface().(string), nil
+	}
+
 	arr, err := json.Marshal(v.Interface())
 	if err != nil {
 		return "<ERROR>", err
@@ -72,6 +76,10 @@ func serializeMapKey(v reflect.Value) (string, error) {
 
 func unserializeMapKey(s string, t reflect.Type) (reflect.Value, error) {
 	v := reflect.New(t).Elem()
+	if t.Kind() == reflect.String {
+		v.Set(reflect.ValueOf(s))
+	}
+
 	err := json.Unmarshal([]byte(s), v.Addr().Interface())
 	if err != nil {
 		return reflect.Zero(t), err
