@@ -1,7 +1,7 @@
 package encoding
 
 import (
-	//"fmt"
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -27,9 +27,11 @@ func TestBasic(t *testing.T) {
 func testEncode(t *testing.T, key string, obj interface{}, truth map[string]string, fields ...interface{}) {
 	m, e := Encode(key, obj, fields...)
 	if e != nil {
+		fmt.Printf("FAIL::::: Encode returned %v\n", e)
 		t.Errorf("Encode returned %v", e)
 	}
 	if !reflect.DeepEqual(truth, m) {
+		fmt.Printf("FAIL::::: Incorrect return %v (should be %v)\n", m, truth)
 		t.Errorf("Incorrect return %v (should be %v)", m, truth)
 	}
 }

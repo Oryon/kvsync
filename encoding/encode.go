@@ -55,7 +55,6 @@ func appendStructField(dir string, f reflect.StructField) (string, error) {
 func serializeMapKey(v reflect.Value) (string, error) {
 	arr, err := json.Marshal(v.Interface())
 	if err != nil {
-		fmt.Printf("Error %v\n", err)
 		return "<ERROR>", err
 	}
 	return string(arr), nil
@@ -65,7 +64,6 @@ func unserializeMapKey(s string, t reflect.Type) (reflect.Value, error) {
 	v := reflect.New(t).Elem()
 	err := json.Unmarshal([]byte(s), v.Addr().Interface())
 	if err != nil {
-		fmt.Printf("Error %s %v %v\n", s, t, err)
 		return reflect.Zero(t), err
 	}
 	return v, nil
@@ -177,78 +175,150 @@ func (state *encodeState) encode(root string, object interface{}) error {
 	return errNotImplemented
 }
 
-func goDownStruct(key string, v reflect.Value, field interface{}) (string, interface{}, error) {
-	name, ok := field.(string)
-	if !ok {
-		return "", nil, ErrWrongFieldType
+func findByFieldsMap(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
+	if len(o.format) == 0 || o.format[0] != "{key}" {
+		return o, fields, fmt.Errorf("Map format must contain a '{key}' element")
+	}
+	o.format = o.format[1:] //Remove "{key}" from format
+
+	key_type := o.value.Type().Key()
+	key := reflect.ValueOf(fields[0])
+	if key.Type() != key_type {
+		return o, nil, ErrWrongFieldType
 	}
 
-	f, ok := v.Type().FieldByName(name)
-	if !ok {
-		return "", nil, ErrWrongFieldName
-	}
-	key, err := appendStructField(key, f)
+	keystr, err := serializeMapKey(key)
 	if err != nil {
-		return "", nil, err
+		return o, nil, err
 	}
 
-	return key, v.FieldByIndex(f.Index).Interface(), nil
+	v := o.value.MapIndex(key)
+	if !v.IsValid() {
+		//TODO: Add possibility to create the value
+		return o, fields, errFindKeyNotFound
+	}
+
+	o.keypath = append(o.keypath, keystr)        // Add object key to keypath
+	o.fields = append(o.fields, key.Interface()) // Set field to key object
+
+	// Set object to inner object
+	// Note: Use of indirect here is probably weird.
+	// It is used to dereference pointers whenever the map stores pointers,
+	// such that the object is addressible.
+	// But it would also work if it does not.
+	o.value = reflect.Indirect(v)
+
+	return findByFields(o, fields)
 }
 
-func goDownMap(dir string, v reflect.Value, field interface{}) (string, interface{}, error) {
-	key_type := v.Type().Key()
-	k := reflect.ValueOf(field)
-	if k.Type() != key_type {
-		return "", nil, ErrWrongFieldType
+func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
+	name, ok := fields[0].(string)
+	if !ok {
+		return o, nil, ErrWrongFieldType
+	}
+	fields = fields[1:]
+
+	f, ok := o.value.Type().FieldByName(name)
+	if !ok {
+		return o, nil, ErrWrongFieldName
 	}
 
-	split := parseMapKey(dir)
-	key_string, err := serializeMapKey(k)
+	format, err := getStructFieldKey(f)
 	if err != nil {
-		return "", nil, err
+		return o, fields, err
 	}
-	key := split[0] + key_string + split[1]
-	return key, v.MapIndex(k), nil //TODO: MapIndex will fail if object does not exist
-}
 
-// Goes down into the object by one step
-func goDown(key string, object interface{}, field interface{}) (string, interface{}, error) {
-	v := reflect.ValueOf(object)
-	switch v.Type().Kind() {
-	case reflect.Struct:
-		return goDownStruct(key, v, field)
-	case reflect.Map:
-		return goDownMap(key, v, field)
-	case reflect.Slice:
-		return "", nil, errNotImplemented
-	case reflect.Array:
-		return "", nil, errNotImplemented
-	case reflect.Ptr:
-		return goDown(key, v.Elem().Interface(), field)
-	default:
-		return "", nil, fmt.Errorf("Unsupported type %v", v.Type().Kind())
-	}
+	o.value = o.value.FieldByIndex(f.Index)
+	o.format = strings.Split(format, "/")
+	o.fields = append(o.fields, name)
+
+	return findByFields(o, fields)
 }
 
 // Goes directely down an object
-func find(key string, object interface{}, fields ...interface{}) (string, interface{}, error) {
+func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
+	for len(o.format) != 0 {
+		if o.format[0] == "" {
+			// This object is supposed to be encoded within the given key path
+			if len(o.format) != 1 {
+				// "" key element must be last
+				return o, nil, fmt.Errorf("Format contains an intermediate space")
+			}
+			break
+		} else if o.format[0] == "{key}" || o.format[0] == "{index}" {
+			//We stop here and can format a map or list element
+			break
+		} else {
+			// Just stack up the format in the keypath
+			o.keypath = append(o.keypath, o.format[0])
+			o.format = o.format[1:]
+		}
+	}
+
+	// Now we have removed all leading objects
+
 	if len(fields) == 0 {
 		// This is the end of the journey, buddy.
-		return key, object, nil
+		if len(o.format) != 0 && o.format[0] == "" {
+			o.keypath = append(o.keypath, "")
+		}
+		return o, fields, nil
 	}
 
-	if key[len(key)-1:] != "/" {
-		// This object is meant to be encoded as JSON at the given position
-		return key, object, nil
+	if len(o.format) == 0 {
+		// The object is supposed to be encoded as a blob
+		// NOTE: It would make sense to check if fields correspond to an inner object, and possibly
+		// return it with the reduced key.
+		// For now let's just return an error.
+		if len(fields) != 0 {
+			return o, nil, errFindPathPastObject
+		}
 	}
 
-	key, object, err := goDown(key, object, fields[0])
+	if len(fields) == 0 {
+		// We found the object
+		return o, fields, nil
+	}
+
+	switch o.value.Type().Kind() {
+	case reflect.Struct:
+		return findByFieldsStruct(o, fields)
+	case reflect.Map:
+		return findByFieldsMap(o, fields)
+	case reflect.Slice:
+		return o, nil, errNotImplemented
+	case reflect.Array:
+		return o, nil, errNotImplemented
+	case reflect.Ptr:
+		o.value = o.value.Elem()
+		return findByFields(o, fields)
+	default:
+		return o, nil, fmt.Errorf("Unsupported type %v", o.value.Type().Kind())
+	}
+}
+
+// Finds a sub-object based on the path of successive fields.
+//
+// Returns the found object, its path, and possibly an error.
+func FindByFields(object interface{}, format string, fields ...interface{}) (interface{}, string, string, error) {
+	o := objectPath{
+		value:  reflect.ValueOf(object),
+		format: strings.Split(format, "/"),
+	}
+
+	o, _, err := findByFields(o, fields)
 	if err != nil {
-		return key, object, err
+		return nil, "", "", err
 	}
 
-	fields = fields[1:]
-	return find(key, object, fields...)
+	if !o.value.CanAddr() {
+		// Returning a copy if the object is non-addressable
+		return o.value.Interface(), strings.Join(o.keypath, "/"), strings.Join(o.format, "/"), nil
+		//NOTE: Another option would be to return a copy of the value
+		//return nil, "", errNotAddressible
+	}
+
+	return o.value.Addr().Interface(), strings.Join(o.keypath, "/"), strings.Join(o.format, "/"), nil
 }
 
 // Encode part of the object stored at position key.
@@ -261,15 +331,23 @@ func Encode(key string, object interface{}, fields ...interface{}) (map[string]s
 		return nil, ErrFirstSlash
 	}
 
-	key, object, err := find(key, object, fields...)
-	if err != nil {
-		return nil, err
+	if len(fields) != 0 {
+		o, subkey, format, err := FindByFields(object, "", fields...)
+		if err != nil {
+			return nil, err
+		}
+		key = key + subkey
+		if format != "" {
+			key = key + "/" + format
+		}
+
+		object = o
 	}
 
 	state := &encodeState{
 		kvs: make(map[string]string),
 	}
-	err = state.encode(key, object)
+	err := state.encode(key, object)
 	if err != nil {
 		return nil, err
 	}
