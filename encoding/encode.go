@@ -53,6 +53,22 @@ type objectPath struct {
 	// e.g. [ <prefix>... , "{key}", <suffix>... ], map values are stored at "prefix/<key>" using <suffix> format.
 	// e.g. [ <prefix>... , "{index}", <suffix>... ], array or slice values are stored at "prefix/<index>" using <suffix> format.
 	format []string
+
+	// When trying to update an object, it may happen that it is non-addressable.
+	// In such cases, it is necessary to roll-back to the last addressable value, make a copy of the
+	// next value, assign it, and update the created value.
+	lastAddressable *objectPath
+}
+
+type findOptions struct {
+	// Creates the searched object if it does not exists yet.
+	Create bool
+
+	// When non-nil, sets the searched object by serializing the string into the searched object.
+	SetValue *string
+
+	// When non-nil, sets the searched object with the given value.
+	SetObject interface{}
 }
 
 func getStructFieldKey(f reflect.StructField) (string, error) {
@@ -97,8 +113,10 @@ func serializeMapKey(v reflect.Value) (string, error) {
 
 func unserializeMapKey(s string, t reflect.Type) (reflect.Value, error) {
 	v := reflect.New(t).Elem()
+	fmt.Printf("unserializeMapKey %v %v\n", s, t)
 	if t.Kind() == reflect.String {
 		v.Set(reflect.ValueOf(s))
+		return v, nil
 	}
 
 	err := json.Unmarshal([]byte(s), v.Addr().Interface())
@@ -273,6 +291,17 @@ func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []inter
 
 // Goes directely down an object
 func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
+
+	// First we always dereference pointers, even though the value may become invalid
+	if o.vtype.Kind() == reflect.Ptr {
+		if o.value.IsValid() {
+			o.value = o.value.Elem()
+			// TODO: Maybe create the value if does not exist
+		}
+		o.vtype = o.vtype.Elem()
+		return findByFields(o, fields)
+	}
+
 	for len(o.format) != 0 {
 		if o.format[0] == "" {
 			// This object is supposed to be encoded within the given key path
@@ -322,12 +351,6 @@ func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}
 		return o, nil, errNotImplemented
 	case reflect.Array:
 		return o, nil, errNotImplemented
-	case reflect.Ptr:
-		if o.value.IsValid() {
-			o.value = o.value.Elem()
-		}
-		o.vtype = o.vtype.Elem()
-		return findByFields(o, fields)
 	default:
 		return o, nil, fmt.Errorf("Unsupported type %v", o.vtype.Kind())
 	}
@@ -398,7 +421,7 @@ func Encode(key string, object interface{}, fields ...interface{}) (map[string]s
 
 // Find sub-object from struct per its key
 // Returns the found object, the consumed key path
-func findByKeyOneStruct(o objectPath, path []string) (objectPath, error) {
+func findByKeyOneStruct(o objectPath, path []string, opt findOptions) (objectPath, error) {
 	if len(o.format) != 1 && o.format[0] != "" {
 		return o, fmt.Errorf("Struct object expect [\"\"] format")
 	}
@@ -424,7 +447,7 @@ func findByKeyOneStruct(o objectPath, path []string) (objectPath, error) {
 		if err == nil {
 			// We can fully look in there
 			o2.fields = append(o2.fields, f.Name)
-			return findByKey(o2, path2)
+			return findByKey(o2, path2, opt)
 		}
 		// Let's continue searching
 	}
@@ -432,7 +455,7 @@ func findByKeyOneStruct(o objectPath, path []string) (objectPath, error) {
 }
 
 // Finds a sub-object inside a map with the provided object format (e.g. {key}, {key}/, {key}/name).
-func findByKeyOneMap(o objectPath, path []string) (objectPath, error) {
+func findByKeyOneMap(o objectPath, path []string, opt findOptions) (objectPath, error) {
 	if len(o.format) == 0 || o.format[0] != "{key}" {
 		return o, fmt.Errorf("Map format must contain a '{key}' element")
 	}
@@ -458,7 +481,7 @@ func findByKeyOneMap(o objectPath, path []string) (objectPath, error) {
 	o.fields = append(o.fields, keyvalue.Interface()) // Set field to key object
 
 	// Iterate within the object
-	return findByKey(o, path[1:])
+	return findByKey(o, path[1:], opt)
 }
 
 func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) {
@@ -486,14 +509,32 @@ func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) 
 	return o, path, nil
 }
 
-func findByKey(o objectPath, path []string) (objectPath, error) {
+func findByKey(o objectPath, path []string, opt findOptions) (objectPath, error) {
+	fmt.Printf("findByKey: o:%v, path:%v, opt:%v\n", o, path, opt)
+
+	// First we always dereference pointers, even though the value may become invalid
+	if o.vtype.Kind() == reflect.Ptr {
+		if o.value.IsValid() {
+			o.value = o.value.Elem()
+			// TODO: Maybe create the value if it does not exist
+		}
+		o.vtype = o.vtype.Elem()
+		return findByKey(o, path, opt)
+	}
+
 	// First go through format prefixing element (before "", "{key}" or "{index}")
 	o, path, err := findByKeyFormat(o, path)
 	if err != nil {
 		return o, err
 	}
 
+	if o.value.IsValid() && o.value.CanAddr() {
+		o2 := o                 // Make a copy
+		o.lastAddressable = &o2 // Remember as last addressable
+	}
+
 	if len(o.format) == 0 {
+		fmt.Printf("Empty format\n")
 		// The object is supposed to be encoded as a blob
 		if len(path) != 0 {
 			// Path is too specific and therefore does not correspond to an encoded object.
@@ -513,19 +554,13 @@ func findByKey(o objectPath, path []string) (objectPath, error) {
 
 	switch o.vtype.Kind() {
 	case reflect.Struct:
-		return findByKeyOneStruct(o, path)
+		return findByKeyOneStruct(o, path, opt)
 	case reflect.Map:
-		return findByKeyOneMap(o, path)
+		return findByKeyOneMap(o, path, opt)
 	case reflect.Slice:
 		return o, errNotImplemented
 	case reflect.Array:
 		return o, errNotImplemented
-	case reflect.Ptr:
-		if o.value.IsValid() {
-			o.value = o.value.Elem()
-		}
-		o.vtype = o.vtype.Elem()
-		return findByKey(o, path)
 	default:
 		return o, fmt.Errorf("Unsupported type %v", o.value.Type().Kind())
 	}
@@ -546,7 +581,7 @@ func FindByKey(o interface{}, format string, path string) (interface{}, []interf
 		vtype:  reflect.TypeOf(o),
 		format: strings.Split(format, "/"),
 	}
-	op, err := findByKey(op, strings.Split(path, "/"))
+	op, err := findByKey(op, strings.Split(path, "/"), findOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -565,15 +600,15 @@ func FindByKey(o interface{}, format string, path string) (interface{}, []interf
 
 // Update transforms a (key,value) into an actually modified object.
 //
-// Given an object and its format, as well as a (key, value) pair (were key is relative to the object),
-// Update returns the sub-object as described by the provided value, as well as the field path to that sub-object.
+// Given an object and its format, as well as a (key, value) pair (where key is relative to the object),
+// Update modifies the object, returns the modified object, as well as the field path to the modified sub-object.
 func Update(object interface{}, format string, keypath string, value string) (interface{}, []interface{}, error) {
 	o := objectPath{
 		value:  reflect.ValueOf(object),
 		vtype:  reflect.TypeOf(object),
 		format: strings.Split(format, "/"),
 	}
-	o, err := findByKey(o, strings.Split(keypath, "/"))
+	o, err := findByKey(o, strings.Split(keypath, "/"), findOptions{})
 	if err != nil {
 		return nil, nil, err
 	}

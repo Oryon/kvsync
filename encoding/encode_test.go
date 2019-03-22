@@ -3,6 +3,7 @@ package encoding
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -222,13 +223,13 @@ func TestFindByKey0(t *testing.T) {
 	o, fields, err = FindByKey(&s, "", "map1/")
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
+	o, fields, err = FindByKey(&s, "", "map1/testkey")
 	failIfErrorDifferent(t, err, errFindPathNotFound)
 
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/")
+	o, fields, err = FindByKey(&s, "", "map1/testkey/")
 	failIfErrorDifferent(t, err, errFindPathNotFound)
 
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/nnn")
+	o, fields, err = FindByKey(&s, "", "map1/testkey/nnn")
 	failIfErrorDifferent(t, err, errFindPathNotFound)
 
 	s.C = make(map[string]*S4)
@@ -236,12 +237,12 @@ func TestFindByKey0(t *testing.T) {
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
+	o, fields, err = FindByKey(&s, "", "map1/testkey")
 	failIfErrorDifferent(t, err, errFindPathNotFound)
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/")
+	o, fields, err = FindByKey(&s, "", "map1/testkey/")
 	failIfErrorDifferent(t, err, errFindPathNotFound)
 
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/nnn")
+	o, fields, err = FindByKey(&s, "", "map1/testkey/nnn")
 	failIfErrorDifferent(t, err, errFindPathNotFound)
 
 	s.C["testkey"] = &s.A
@@ -250,16 +251,16 @@ func TestFindByKey0(t *testing.T) {
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"")
+	o, fields, err = FindByKey(&s, "", "map1/testkey")
 	failIfErrorDifferent(t, err, errFindPathNotFound)
 
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/")
+	o, fields, err = FindByKey(&s, "", "map1/testkey/")
 	failIfErrorDifferent(t, err, errFindPathNotFound)
 
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/in")
+	o, fields, err = FindByKey(&s, "", "map1/testkey/in")
 	failIfErrorDifferent(t, err, errFindPathNotFound)
 
-	o, fields, err = FindByKey(&s, "", "map1/\"testkey\"/in/here")
+	o, fields, err = FindByKey(&s, "", "map1/testkey/in/here")
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, s.C["testkey"], []interface{}{"C", "testkey"})
 
@@ -293,6 +294,66 @@ func TestFindByKey0(t *testing.T) {
 
 }
 
-func Testupdate0(t *testing.T) {
+func testLastAddressable(t *testing.T, s interface{}, keypath string, expected []interface{}) {
+	opt := findOptions{}
+	o := objectPath{
+		value:  reflect.ValueOf(s),
+		vtype:  reflect.TypeOf(s),
+		format: []string{""},
+	}
+	o2, err := findByKey(o, strings.Split(keypath, "/"), opt)
+	if err != nil {
+		t.Errorf("findByKey returned %v", err)
+		return
+	}
+	if o2.lastAddressable == nil {
+		if expected != nil {
+			t.Errorf("lastAddressable should be nil")
+			return
+		}
+		return //OK
+	}
 
+	if !reflect.DeepEqual(o2.lastAddressable.fields, expected) {
+		t.Errorf("lastAddressable is %v and should be %v", o2.lastAddressable.fields, expected)
+	}
+}
+
+type S6 struct {
+	IntPtrMap map[string]*int `kvs:"IntPtrMap/{key}"`
+	IntMap    map[string]int  `kvs:"IntMap/{key}"`
+}
+
+type S7 struct {
+	i           int
+	S6PtrMap    map[string]*S6 `kvs:"S6PtrMap/{key}/"`
+	S6StructMap map[string]S6  `kvs:"S6StructMap/{key}/"`
+}
+
+func TestLastAddressable(t *testing.T) {
+	s := S7{
+		S6PtrMap:    make(map[string]*S6),
+		S6StructMap: make(map[string]S6),
+	}
+	s.S6PtrMap["a"] = &S6{
+		IntPtrMap: make(map[string]*int),
+		IntMap:    make(map[string]int),
+	}
+	s.S6StructMap["a"] = S6{
+		IntPtrMap: make(map[string]*int),
+		IntMap:    make(map[string]int),
+	}
+
+	testLastAddressable(t, s, "S6PtrMap/a/IntMap/", []interface{}{"S6PtrMap", "a", "IntMap"})
+	testLastAddressable(t, &s, "S6PtrMap/a/IntMap/", []interface{}{"S6PtrMap", "a", "IntMap"})
+	testLastAddressable(t, s, "S6PtrMap/", nil)
+	testLastAddressable(t, &s, "S6PtrMap/", []interface{}{"S6PtrMap"})
+	testLastAddressable(t, s, "i", nil)
+	testLastAddressable(t, &s, "i", []interface{}{"i"})
+
+	a := 2
+	s.S6StructMap["a"].IntPtrMap["b"] = &a
+	s.S6StructMap["a"].IntMap["b"] = a
+	testLastAddressable(t, &s, "S6StructMap/a/IntMap/b", []interface{}{"S6StructMap"})
+	testLastAddressable(t, &s, "S6StructMap/a/IntPtrMap/b", []interface{}{"S6StructMap", "a", "IntPtrMap", "b"})
 }
