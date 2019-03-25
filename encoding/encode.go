@@ -18,6 +18,8 @@ var errFindKeyNotFound = errors.New("Key was not found in map")
 var errFindKeyInvalid = errors.New("Invalid key for this object")
 var errFindPathNotFound = errors.New("Object not found at specified path")
 var errNotAddressable = errors.New("Requested object is not addressable")
+var errFindSetNoExists = errors.New("Cannot set non existent object")
+var errFindSetWrongType = errors.New("The provided object is of wrong type")
 
 // State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {
@@ -54,10 +56,9 @@ type objectPath struct {
 	// e.g. [ <prefix>... , "{index}", <suffix>... ], array or slice values are stored at "prefix/<index>" using <suffix> format.
 	format []string
 
-	// When trying to update an object, it may happen that it is non-addressable.
-	// In such cases, it is necessary to roll-back to the last addressable value, make a copy of the
-	// next value, assign it, and update the created value.
-	lastAddressable *objectPath
+	// When setting a value, traversing a map will make a value non-addressible.
+	// We have to remember which is the last crossed map, such as to make the traversal addressable if necessary.
+	lastMapIndirection *objectPath
 }
 
 type findOptions struct {
@@ -69,6 +70,9 @@ type findOptions struct {
 
 	// When non-nil, sets the searched object with the given value.
 	SetObject interface{}
+
+	// Next time a map entry is crossed, it will be made addressable for the rest of the way
+	MakeMapAddressable bool
 }
 
 func getStructFieldKey(f reflect.StructField) (string, error) {
@@ -113,7 +117,6 @@ func serializeMapKey(v reflect.Value) (string, error) {
 
 func unserializeMapKey(s string, t reflect.Type) (reflect.Value, error) {
 	v := reflect.New(t).Elem()
-	fmt.Printf("unserializeMapKey %v %v\n", s, t)
 	if t.Kind() == reflect.String {
 		v.Set(reflect.ValueOf(s))
 		return v, nil
@@ -456,6 +459,9 @@ func findByKeyOneStruct(o objectPath, path []string, opt findOptions) (objectPat
 
 // Finds a sub-object inside a map with the provided object format (e.g. {key}, {key}/, {key}/name).
 func findByKeyOneMap(o objectPath, path []string, opt findOptions) (objectPath, error) {
+	o2 := o
+	o.lastMapIndirection = &o2
+
 	if len(o.format) == 0 || o.format[0] != "{key}" {
 		return o, fmt.Errorf("Map format must contain a '{key}' element")
 	}
@@ -467,21 +473,77 @@ func findByKeyOneMap(o objectPath, path []string, opt findOptions) (objectPath, 
 		return o, err
 	}
 
+	m := o.value
 	if o.value.IsValid() {
+
+		if o.value.IsNil() && opt.Create {
+			if !o.value.CanSet() {
+				return findByKeyRevertAddressable(o, path, opt)
+			}
+			n := reflect.New(o.vtype) // Create new map
+			o.value.Set(n.Elem())     // Set the pointer value to the current value
+			m = o.value
+		}
+
 		// Set object to inner object
 		// Note: Use of indirect here is probably weird.
 		// It is used to dereference pointers whenever the map stores pointers,
 		// such that the object is addressible.
 		// But it would also work if it does not.
-		o.value = o.value.MapIndex(keyvalue)
+		val := o.value.MapIndex(keyvalue)
+
+		if val.IsValid() {
+			o.value = val
+		} else if opt.Create {
+			val = reflect.New(o.vtype.Elem())         // Get pointer to a new value
+			o.value.SetMapIndex(keyvalue, val.Elem()) // Set the value in the map
+			o.value = o.value.MapIndex(keyvalue)      // Get the value
+		} else {
+			o.value = val
+		}
 	}
 
+	o.fields = append(o.fields, keyvalue.Interface()) // Set field to key object
 	o.vtype = o.vtype.Elem()                          // Get the map value type
 	o.keypath = append(o.keypath, path[0])            // Add object key to keypath
-	o.fields = append(o.fields, keyvalue.Interface()) // Set field to key object
 
-	// Iterate within the object
-	return findByKey(o, path[1:], opt)
+	if opt.MakeMapAddressable {
+		// Note that MakeMapAddressable requires the value to exist. We do not check here.
+		val := reflect.New(o.vtype)
+		val.Elem().Set(o.value) // Make a copy of the current value
+
+		o.value = val.Elem()
+		opt.MakeMapAddressable = false
+		o, err := findByKey(o, path[1:], opt) //Iterate on the addressable value
+		if err != nil {
+			return o, err
+		}
+		m.SetMapIndex(keyvalue, val.Elem()) // Set the addressable value in the map
+		return o, err
+	} else {
+		// Iterate within the object
+		return findByKey(o, path[1:], opt)
+	}
+}
+
+func findByKeyPtr(o objectPath, path []string, opt findOptions) (objectPath, error) {
+	if o.value.IsValid() {
+
+		if o.value.Elem().IsValid() {
+			o.value = o.value.Elem()
+		} else if opt.Create {
+			if !o.value.CanSet() {
+				return findByKeyRevertAddressable(o, path, opt)
+			}
+			n := reflect.New(o.vtype.Elem()) // Get pointer to a new value
+			o.value.Set(n)                   // Set the pointer value to the current value
+			o.value = o.value.Elem()         // Dereference
+		} else {
+			o.value = o.value.Elem()
+		}
+	}
+	o.vtype = o.vtype.Elem()
+	return findByKey(o, path, opt)
 }
 
 func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) {
@@ -509,38 +571,76 @@ func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) 
 	return o, path, nil
 }
 
-func findByKey(o objectPath, path []string, opt findOptions) (objectPath, error) {
-	fmt.Printf("findByKey: o:%v, path:%v, opt:%v\n", o, path, opt)
-
-	// First we always dereference pointers, even though the value may become invalid
-	if o.vtype.Kind() == reflect.Ptr {
-		if o.value.IsValid() {
-			o.value = o.value.Elem()
-			// TODO: Maybe create the value if it does not exist
-		}
-		o.vtype = o.vtype.Elem()
-		return findByKey(o, path, opt)
+// When some object must be changed but is not addressable, we revert to the last addressable object
+// and restart while asking for the rest of the process to be addressable.
+func findByKeyRevertAddressable(o objectPath, path []string, opt findOptions) (objectPath, error) {
+	if o.lastMapIndirection == nil {
+		return o, fmt.Errorf("Object is not addressable")
 	}
 
-	// First go through format prefixing element (before "", "{key}" or "{index}")
+	path = append(o.keypath[len(o.lastMapIndirection.keypath):], path...) // Reconstruct the keypath before it was consumed
+	o = *o.lastMapIndirection
+	opt.MakeMapAddressable = true
+	return findByKeyOneMap(o, path, opt)
+}
+
+func findByKeySetMaybe(o objectPath, path []string, opt findOptions) (objectPath, error) {
+	// If no set is needed, return ok
+	if opt.SetObject == nil && opt.SetValue == nil {
+		return o, nil
+	}
+
+	// Can only set if the value exists (opt.Create should be set if intent is to create too)
+	if !o.value.IsValid() {
+		return o, errFindSetNoExists
+	}
+
+	// If object cannot be set, try to rollback
+	if !o.value.CanSet() {
+		return findByKeyRevertAddressable(o, path, opt)
+	}
+
+	var value reflect.Value
+	var err error
+	// If set by string, parse the string
+	if opt.SetObject == nil {
+		value, err = unserializeValue(*opt.SetValue, o.vtype)
+		if err != nil {
+			return o, err
+		}
+	} else {
+		value = reflect.ValueOf(opt.SetObject).Elem()
+	}
+
+	// Check the type
+	if value.Type() != o.vtype {
+		return o, errFindSetWrongType
+	}
+
+	// Set the value
+	o.value.Set(value)
+	return o, nil
+}
+
+func findByKey(o objectPath, path []string, opt findOptions) (objectPath, error) {
+	if o.vtype.Kind() == reflect.Ptr {
+		// Let's first dereference (Before actually parsing the keys)
+		return findByKeyPtr(o, path, opt)
+	}
+
+	// Go through format prefixing element (before "", "{key}" or "{index}")
 	o, path, err := findByKeyFormat(o, path)
 	if err != nil {
 		return o, err
 	}
 
-	if o.value.IsValid() && o.value.CanAddr() {
-		o2 := o                 // Make a copy
-		o.lastAddressable = &o2 // Remember as last addressable
-	}
-
 	if len(o.format) == 0 {
-		fmt.Printf("Empty format\n")
 		// The object is supposed to be encoded as a blob
 		if len(path) != 0 {
 			// Path is too specific and therefore does not correspond to an encoded object.
 			return o, errFindPathPastObject
 		}
-		return o, nil
+		return findByKeySetMaybe(o, path, opt)
 	}
 
 	if len(path) == 0 || (path[0] == "" && len(path) != 1) {
@@ -549,7 +649,7 @@ func findByKey(o objectPath, path []string, opt findOptions) (objectPath, error)
 	}
 
 	if path[0] == "" {
-		return o, nil
+		return findByKeySetMaybe(o, path, opt)
 	}
 
 	switch o.vtype.Kind() {
@@ -601,22 +701,21 @@ func FindByKey(o interface{}, format string, path string) (interface{}, []interf
 // Update transforms a (key,value) into an actually modified object.
 //
 // Given an object and its format, as well as a (key, value) pair (where key is relative to the object),
-// Update modifies the object, returns the modified object, as well as the field path to the modified sub-object.
-func Update(object interface{}, format string, keypath string, value string) (interface{}, []interface{}, error) {
+// Update modifies the object, returns the field path to the modified sub-object.
+func UpdateKeyObject(object interface{}, format string, keypath string, value string) ([]interface{}, error) {
 	o := objectPath{
 		value:  reflect.ValueOf(object),
 		vtype:  reflect.TypeOf(object),
 		format: strings.Split(format, "/"),
 	}
-	o, err := findByKey(o, strings.Split(keypath, "/"), findOptions{})
+	opt := findOptions{
+		Create:   true,
+		SetValue: &value,
+	}
+	o, err := findByKey(o, strings.Split(keypath, "/"), opt)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	object, err = unserializeValue(value, o.value.Type())
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return object, o.fields, nil
+	return o.fields, nil
 }

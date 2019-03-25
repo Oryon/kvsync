@@ -3,7 +3,7 @@ package encoding
 import (
 	"fmt"
 	"reflect"
-	"strings"
+	//"strings"
 	"testing"
 )
 
@@ -294,43 +294,30 @@ func TestFindByKey0(t *testing.T) {
 
 }
 
-func testLastAddressable(t *testing.T, s interface{}, keypath string, expected []interface{}) {
-	opt := findOptions{}
-	o := objectPath{
-		value:  reflect.ValueOf(s),
-		vtype:  reflect.TypeOf(s),
-		format: []string{""},
-	}
-	o2, err := findByKey(o, strings.Split(keypath, "/"), opt)
-	if err != nil {
-		t.Errorf("findByKey returned %v", err)
-		return
-	}
-	if o2.lastAddressable == nil {
-		if expected != nil {
-			t.Errorf("lastAddressable should be nil")
-			return
-		}
-		return //OK
-	}
-
-	if !reflect.DeepEqual(o2.lastAddressable.fields, expected) {
-		t.Errorf("lastAddressable is %v and should be %v", o2.lastAddressable.fields, expected)
-	}
-}
-
 type S6 struct {
 	IntPtrMap map[string]*int `kvs:"IntPtrMap/{key}"`
 	IntMap    map[string]int  `kvs:"IntMap/{key}"`
 }
 
 type S7 struct {
-	i           int
-	S6PtrMap    map[string]*S6 `kvs:"S6PtrMap/{key}/"`
-	S6StructMap map[string]S6  `kvs:"S6StructMap/{key}/"`
+	I           int
+	S6PtrMap    map[string]*S6 `kvs:"s6_ptr_map/{key}/sub/"`
+	S6StructMap map[string]S6  `kvs:"s6_struct_map/{key}/sub/"`
 }
 
-func TestLastAddressable(t *testing.T) {
+func testUpdateKeyObject(t *testing.T, object interface{}, format string, keypath string, value string, path []interface{}) {
+	rpath, err := UpdateKeyObject(object, format, keypath, value)
+	if err != nil {
+		t.Errorf("findByKey returned %v", err)
+		return
+	}
+
+	if !reflect.DeepEqual(rpath, path) {
+		t.Errorf("returned path is %v and should be %v", rpath, path)
+	}
+}
+
+func TestUpdateKeyObject(t *testing.T) {
 	s := S7{
 		S6PtrMap:    make(map[string]*S6),
 		S6StructMap: make(map[string]S6),
@@ -344,16 +331,19 @@ func TestLastAddressable(t *testing.T) {
 		IntMap:    make(map[string]int),
 	}
 
-	testLastAddressable(t, s, "S6PtrMap/a/IntMap/", []interface{}{"S6PtrMap", "a", "IntMap"})
-	testLastAddressable(t, &s, "S6PtrMap/a/IntMap/", []interface{}{"S6PtrMap", "a", "IntMap"})
-	testLastAddressable(t, s, "S6PtrMap/", nil)
-	testLastAddressable(t, &s, "S6PtrMap/", []interface{}{"S6PtrMap"})
-	testLastAddressable(t, s, "i", nil)
-	testLastAddressable(t, &s, "i", []interface{}{"i"})
+	testUpdateKeyObject(t, &s, "", "I", "122", []interface{}{"I"})
+	if s.I != 122 {
+		t.Errorf("Error\n")
+	}
 
-	a := 2
-	s.S6StructMap["a"].IntPtrMap["b"] = &a
-	s.S6StructMap["a"].IntMap["b"] = a
-	testLastAddressable(t, &s, "S6StructMap/a/IntMap/b", []interface{}{"S6StructMap"})
-	testLastAddressable(t, &s, "S6StructMap/a/IntPtrMap/b", []interface{}{"S6StructMap", "a", "IntPtrMap", "b"})
+	testUpdateKeyObject(t, &s, "", "s6_struct_map/a/sub/IntMap/b", "123", []interface{}{"S6StructMap", "a", "IntMap", "b"})
+	if s.S6StructMap["a"].IntMap["b"] != 123 {
+		t.Errorf("Error\n")
+	}
+
+	fmt.Println()
+	testUpdateKeyObject(t, &s, "", "s6_ptr_map/aa/sub/IntMap/bb", "123", []interface{}{"S6StructMap", "aa", "IntMap", "bb"})
+	if s.S6PtrMap["aa"].IntMap["bb"] != 123 {
+		t.Errorf("Error\n")
+	}
 }
