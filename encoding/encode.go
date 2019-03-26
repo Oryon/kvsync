@@ -20,6 +20,7 @@ var errFindPathNotFound = errors.New("Object not found at specified path")
 var errFindSetNoExists = errors.New("Cannot set non existent object")
 var errFindSetWrongType = errors.New("The provided object is of wrong type")
 var errScalarType = errors.New("Cannot recursively store scalar type")
+var errTagFirstSlash = errors.New("Structure field tag cannot start with /")
 
 // State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {
@@ -75,14 +76,15 @@ type findOptions struct {
 	MakeMapAddressable bool
 }
 
-func getStructFieldKey(f reflect.StructField) (string, error) {
+// Returns the format
+func getStructFieldFormat(f reflect.StructField) ([]string, error) {
 	tag := f.Tag.Get("kvs")
 	if tag == "" {
-		return f.Name, nil
+		return []string{f.Name}, nil
 	} else if tag[:1] == "/" {
-		return "<ERROR>", fmt.Errorf("tag must not start with /")
+		return nil, errTagFirstSlash
 	} else {
-		return tag, nil
+		return strings.Split(tag, "/"), nil
 	}
 }
 
@@ -138,13 +140,13 @@ func (state *encodeState) encodeStruct(o objectPath) error {
 			continue
 		}
 
-		k, err := getStructFieldKey(f)
+		format, err := getStructFieldFormat(f)
 		if err != nil {
 			return err
 		}
 
 		o.value = v.Field(i)
-		o.format = strings.Split(k, "/")
+		o.format = format
 
 		err = state.encode(o)
 		if err != nil {
@@ -278,7 +280,7 @@ func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []inter
 		return o, nil, ErrWrongFieldName
 	}
 
-	format, err := getStructFieldKey(f)
+	format, err := getStructFieldFormat(f)
 	if err != nil {
 		return o, fields, err
 	}
@@ -287,7 +289,7 @@ func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []inter
 		o.value = o.value.FieldByIndex(f.Index)
 	}
 	o.vtype = o.vtype.FieldByIndex(f.Index).Type
-	o.format = strings.Split(format, "/")
+	o.format = format
 	o.fields = append(o.fields, name)
 
 	return findByFields(o, fields)
@@ -437,7 +439,7 @@ func findByKeyOneStruct(o objectPath, path []string, opt findOptions) (objectPat
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 
-		k, err := getStructFieldKey(f)
+		format, err := getStructFieldFormat(f)
 		if err != nil {
 			return o, err
 		}
@@ -446,7 +448,7 @@ func findByKeyOneStruct(o objectPath, path []string, opt findOptions) (objectPat
 			o.value = v.Field(i) // Get field if value exists
 		}
 		o.vtype = f.Type // Get attribute type
-		o.format = strings.Split(k, "/")
+		o.format = format
 
 		// First see if the format corresponds
 		o2, path2, err := findByKeyFormat(o, path)
