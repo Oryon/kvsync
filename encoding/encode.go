@@ -232,6 +232,9 @@ func (state *encodeState) encode(o objectPath) error {
 }
 
 func findByFieldsMap(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
+	o2 := o
+	o.lastMapIndirection = &o2
+
 	if len(o.format) == 0 || o.format[0] != "{key}" {
 		return o, fields, fmt.Errorf("Map format must contain a '{key}' element")
 	}
@@ -242,34 +245,63 @@ func findByFieldsMap(o objectPath, fields []interface{}, opt findOptions) (objec
 	if key.Type() != key_type {
 		return o, nil, errFindMapWrongType
 	}
-	fields = fields[1:]
 
 	keystr, err := serializeMapKey(key)
 	if err != nil {
 		return o, nil, err
 	}
 
+	m := o.value
 	if o.value.IsValid() {
-		// When the current value exists, try to lookup the map
-		v := o.value.MapIndex(key)
-		if v.IsValid() {
-			// Set object to inner object
-			// Note: Use of indirect here is probably weird.
-			// It is used to dereference pointers whenever the map stores pointers,
-			// such that the object is addressible.
-			// But it would also work if it does not.
-			o.value = v
-		} else {
-			o.value = v
+
+		if o.value.IsNil() && opt.Create {
+			if !o.value.CanSet() {
+				return findByFieldsRevertAddressable(o, fields, opt)
+			}
+			n := reflect.MakeMap(o.vtype) // Create new map
+			o.value.Set(n)                // Set the pointer value to the current value
+			m = o.value
 		}
-		//TODO: Add option to add when non existent
+
+		// Set object to inner object
+		// Note: Use of indirect here is probably weird.
+		// It is used to dereference pointers whenever the map stores pointers,
+		// such that the object is addressible.
+		// But it would also work if it does not.
+		val := o.value.MapIndex(key)
+
+		if val.IsValid() {
+			o.value = val
+		} else if opt.Create {
+			val = reflect.New(o.vtype.Elem())    // Get pointer to a new value
+			o.value.SetMapIndex(key, val.Elem()) // Set the value in the map
+			o.value = o.value.MapIndex(key)      // Get the value
+		} else {
+			o.value = val
+		}
 	}
 
 	o.vtype = o.vtype.Elem()                     // Get type of the element
 	o.keypath = append(o.keypath, keystr)        // Add object key to keypath
 	o.fields = append(o.fields, key.Interface()) // Set field to key object
 
-	return findByFields(o, fields, opt)
+	if opt.MakeMapAddressable {
+		// Note that MakeMapAddressable requires the value to exist. We do not check here.
+		val := reflect.New(o.vtype)
+		val.Elem().Set(o.value) // Make a copy of the current value
+
+		o.value = val.Elem()
+		opt.MakeMapAddressable = false
+		o, fields, err = findByFields(o, fields[1:], opt) //Iterate on the addressable value
+		if err != nil {
+			return o, nil, err
+		}
+		m.SetMapIndex(key, val.Elem()) // Set the addressable value in the map
+		return o, fields, err
+	} else {
+		// Iterate within the object
+		return findByFields(o, fields[1:], opt)
+	}
 }
 
 func findByFieldsStruct(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
@@ -301,11 +333,25 @@ func findByFieldsStruct(o objectPath, fields []interface{}, opt findOptions) (ob
 }
 
 func findByFieldsPtr(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
-	if o.value.IsValid() {
-		o.value = o.value.Elem()
-		// TODO: Maybe create the value if does not exist
+	if o.value.IsValid() { // Value represents an actual pointer
+		if o.value.Elem().IsValid() {
+			// Pointer contains a valide value
+			o.value = o.value.Elem() // Dereference
+		} else if opt.Create {
+			// Create object
+			if !o.value.CanSet() {
+				// But can't set !
+				return findByFieldsRevertAddressable(o, fields, opt) // Revert to last addressable
+			}
+			n := reflect.New(o.vtype.Elem()) // Get pointer to a new value
+			o.value.Set(n)                   // Set the pointer value to the current value
+			o.value = o.value.Elem()         // Dereference
+		} else {
+			o.value = o.value.Elem() // Just dereference
+		}
 	}
-	o.vtype = o.vtype.Elem()
+
+	o.vtype = o.vtype.Elem() // Dereference type
 	return findByFields(o, fields, opt)
 }
 
