@@ -17,9 +17,9 @@ var errFindPathPastObject = errors.New("Provided path goes past an encoded objec
 var errFindKeyNotFound = errors.New("Key was not found in map")
 var errFindKeyInvalid = errors.New("Invalid key for this object")
 var errFindPathNotFound = errors.New("Object not found at specified path")
-var errNotAddressable = errors.New("Requested object is not addressable")
 var errFindSetNoExists = errors.New("Cannot set non existent object")
 var errFindSetWrongType = errors.New("The provided object is of wrong type")
+var errScalarType = errors.New("Cannot recursively store scalar type")
 
 // State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {
@@ -221,9 +221,10 @@ func (state *encodeState) encode(o objectPath) error {
 		return errNotImplemented
 	case reflect.Array:
 		return errNotImplemented
-	default:
-		return fmt.Errorf("Unsupported type %v", o.value.Kind())
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Invalid, reflect.UnsafePointer:
 		return errUnsupportedType
+	default:
+		return errScalarType
 	}
 }
 
@@ -354,8 +355,10 @@ func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}
 		return o, nil, errNotImplemented
 	case reflect.Array:
 		return o, nil, errNotImplemented
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Invalid, reflect.UnsafePointer:
+		return o, nil, errUnsupportedType
 	default:
-		return o, nil, fmt.Errorf("Unsupported type %v", o.vtype.Kind())
+		return o, nil, errScalarType
 	}
 }
 
@@ -661,8 +664,10 @@ func findByKey(o objectPath, path []string, opt findOptions) (objectPath, error)
 		return o, errNotImplemented
 	case reflect.Array:
 		return o, errNotImplemented
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Invalid, reflect.UnsafePointer:
+		return o, errUnsupportedType
 	default:
-		return o, fmt.Errorf("Unsupported type %v", o.value.Type().Kind())
+		return o, errScalarType
 	}
 }
 
