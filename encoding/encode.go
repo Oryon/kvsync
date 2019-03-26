@@ -231,7 +231,7 @@ func (state *encodeState) encode(o objectPath) error {
 	}
 }
 
-func findByFieldsMap(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
+func findByFieldsMap(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
 	if len(o.format) == 0 || o.format[0] != "{key}" {
 		return o, fields, fmt.Errorf("Map format must contain a '{key}' element")
 	}
@@ -269,10 +269,10 @@ func findByFieldsMap(o objectPath, fields []interface{}) (objectPath, []interfac
 	o.keypath = append(o.keypath, keystr)        // Add object key to keypath
 	o.fields = append(o.fields, key.Interface()) // Set field to key object
 
-	return findByFields(o, fields)
+	return findByFields(o, fields, opt)
 }
 
-func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
+func findByFieldsStruct(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
 
 	name, ok := fields[0].(string)
 	if !ok {
@@ -297,21 +297,19 @@ func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []inter
 	o.format = format
 	o.fields = append(o.fields, name)
 
-	return findByFields(o, fields)
+	return findByFields(o, fields, opt)
 }
 
-// Goes directely down an object
-func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
-	// First we always dereference pointers, even though the value may become invalid
-	if o.vtype.Kind() == reflect.Ptr {
-		if o.value.IsValid() {
-			o.value = o.value.Elem()
-			// TODO: Maybe create the value if does not exist
-		}
-		o.vtype = o.vtype.Elem()
-		return findByFields(o, fields)
+func findByFieldsPtr(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
+	if o.value.IsValid() {
+		o.value = o.value.Elem()
+		// TODO: Maybe create the value if does not exist
 	}
+	o.vtype = o.vtype.Elem()
+	return findByFields(o, fields, opt)
+}
 
+func findByFieldsFormat(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
 	for len(o.format) != 0 {
 		if o.format[0] == "" {
 			// This object is supposed to be encoded within the given key path
@@ -328,6 +326,31 @@ func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}
 			o.keypath = append(o.keypath, o.format[0])
 			o.format = o.format[1:]
 		}
+	}
+	return o, fields, nil
+}
+
+func findByFieldsRevertAddressable(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
+	if o.lastMapIndirection == nil {
+		return o, nil, fmt.Errorf("Object is not addressable")
+	}
+
+	fields = append(o.fields[len(o.lastMapIndirection.fields):], fields...) // Reconstruct the fields before they were consumed
+	o = *o.lastMapIndirection
+	opt.MakeMapAddressable = true
+	return findByFieldsMap(o, fields, opt)
+}
+
+// Goes directely down an object
+func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
+	// First we always dereference pointers, even though the value may become invalid
+	if o.vtype.Kind() == reflect.Ptr {
+		return findByFieldsPtr(o, fields, opt)
+	}
+
+	o, fields, err := findByFieldsFormat(o, fields)
+	if err != nil {
+		return o, nil, err
 	}
 
 	// Now we have removed all leading objects
@@ -349,9 +372,9 @@ func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}
 
 	switch o.vtype.Kind() {
 	case reflect.Struct:
-		return findByFieldsStruct(o, fields)
+		return findByFieldsStruct(o, fields, opt)
 	case reflect.Map:
-		return findByFieldsMap(o, fields)
+		return findByFieldsMap(o, fields, opt)
 	case reflect.Slice:
 		return o, nil, errNotImplemented
 	case reflect.Array:
@@ -373,7 +396,7 @@ func FindByFields(object interface{}, format string, fields []interface{}) (inte
 		format: strings.Split(format, "/"),
 	}
 
-	o, _, err := findByFields(o, fields)
+	o, _, err := findByFields(o, fields, findOptions{})
 	if err != nil {
 		return nil, "", err
 	}
@@ -410,7 +433,7 @@ func Encode(key string, object interface{}, fields ...interface{}) (map[string]s
 		keypath: []string{""},
 	}
 
-	o, _, err := findByFields(o, fields)
+	o, _, err := findByFields(o, fields, findOptions{})
 	if err != nil {
 		return nil, err
 	}
