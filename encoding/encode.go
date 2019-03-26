@@ -480,8 +480,8 @@ func findByKeyOneMap(o objectPath, path []string, opt findOptions) (objectPath, 
 			if !o.value.CanSet() {
 				return findByKeyRevertAddressable(o, path, opt)
 			}
-			n := reflect.New(o.vtype) // Create new map
-			o.value.Set(n.Elem())     // Set the pointer value to the current value
+			n := reflect.MakeMap(o.vtype) // Create new map
+			o.value.Set(n)                // Set the pointer value to the current value
 			m = o.value
 		}
 

@@ -297,6 +297,7 @@ func TestFindByKey0(t *testing.T) {
 type S6 struct {
 	IntPtrMap map[string]*int `kvs:"IntPtrMap/{key}"`
 	IntMap    map[string]int  `kvs:"IntMap/{key}"`
+	N         int
 }
 
 type S7 struct {
@@ -341,9 +342,24 @@ func TestUpdateKeyObject(t *testing.T) {
 		t.Errorf("Error\n")
 	}
 
-	fmt.Println()
-	testUpdateKeyObject(t, &s, "", "s6_ptr_map/aa/sub/IntMap/bb", "123", []interface{}{"S6StructMap", "aa", "IntMap", "bb"})
-	if s.S6PtrMap["aa"].IntMap["bb"] != 123 {
+	testUpdateKeyObject(t, &s, "", "s6_ptr_map/aa/sub/IntMap/bb", "124", []interface{}{"S6PtrMap", "aa", "IntMap", "bb"})
+	if s.S6PtrMap["aa"].IntMap["bb"] != 124 {
+		t.Errorf("Error\n")
+	}
+
+	testUpdateKeyObject(t, &s, "", "s6_ptr_map/aa/sub/IntMap/cc", "112", []interface{}{"S6PtrMap", "aa", "IntMap", "cc"})
+	if s.S6PtrMap["aa"].IntMap["cc"] != 112 {
+		t.Errorf("Error\n")
+	}
+	if s.S6PtrMap["aa"].IntMap["bb"] != 124 {
+		t.Errorf("Error\n")
+	}
+	if s.S6StructMap["a"].IntMap["b"] != 123 {
+		t.Errorf("Error\n")
+	}
+
+	testUpdateKeyObject(t, &s, "", "s6_ptr_map/ee/sub/N", "42", []interface{}{"S6PtrMap", "ee", "N"})
+	if s.S6PtrMap["ee"].N != 42 {
 		t.Errorf("Error\n")
 	}
 }
