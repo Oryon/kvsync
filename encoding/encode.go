@@ -21,6 +21,7 @@ var errFindSetNoExists = errors.New("Cannot set non existent object")
 var errFindSetWrongType = errors.New("The provided object is of wrong type")
 var errScalarType = errors.New("Cannot recursively store scalar type")
 var errTagFirstSlash = errors.New("Structure field tag cannot start with /")
+var errFindMapWrongType = errors.New("Provided map key field is of wrong type")
 
 // State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {
@@ -239,8 +240,9 @@ func findByFieldsMap(o objectPath, fields []interface{}) (objectPath, []interfac
 	key_type := o.vtype.Key()
 	key := reflect.ValueOf(fields[0])
 	if key.Type() != key_type {
-		return o, nil, ErrWrongFieldType
+		return o, nil, errFindMapWrongType
 	}
+	fields = fields[1:]
 
 	keystr, err := serializeMapKey(key)
 	if err != nil {
@@ -256,7 +258,9 @@ func findByFieldsMap(o objectPath, fields []interface{}) (objectPath, []interfac
 			// It is used to dereference pointers whenever the map stores pointers,
 			// such that the object is addressible.
 			// But it would also work if it does not.
-			o.value = reflect.Indirect(v)
+			o.value = v
+		} else {
+			o.value = v
 		}
 		//TODO: Add option to add when non existent
 	}
@@ -269,6 +273,7 @@ func findByFieldsMap(o objectPath, fields []interface{}) (objectPath, []interfac
 }
 
 func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
+
 	name, ok := fields[0].(string)
 	if !ok {
 		return o, nil, ErrWrongFieldType
@@ -297,7 +302,6 @@ func findByFieldsStruct(o objectPath, fields []interface{}) (objectPath, []inter
 
 // Goes directely down an object
 func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
-
 	// First we always dereference pointers, even though the value may become invalid
 	if o.vtype.Kind() == reflect.Ptr {
 		if o.value.IsValid() {
@@ -343,11 +347,6 @@ func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}
 		}
 	}
 
-	if len(fields) == 0 {
-		// We found the object
-		return o, fields, nil
-	}
-
 	switch o.vtype.Kind() {
 	case reflect.Struct:
 		return findByFieldsStruct(o, fields)
@@ -367,7 +366,7 @@ func findByFields(o objectPath, fields []interface{}) (objectPath, []interface{}
 // Finds a sub-object based on the path of successive fields.
 //
 // Returns the found object, its path, and possibly an error.
-func FindByFields(object interface{}, format string, fields ...interface{}) (interface{}, string, string, error) {
+func FindByFields(object interface{}, format string, fields []interface{}) (interface{}, string, error) {
 	o := objectPath{
 		value:  reflect.ValueOf(object),
 		vtype:  reflect.TypeOf(object),
@@ -376,20 +375,20 @@ func FindByFields(object interface{}, format string, fields ...interface{}) (int
 
 	o, _, err := findByFields(o, fields)
 	if err != nil {
-		return nil, "", "", err
+		return nil, "", err
 	}
 
 	if !o.value.IsValid() {
-		return nil, "", "", errFindKeyNotFound
+		return nil, "", errFindKeyNotFound
 	}
 
 	if !o.value.CanAddr() {
 		// Returning a copy if the object is non-addressable
-		return o.value.Interface(), strings.Join(o.keypath, "/"), strings.Join(o.format, "/"), nil
+		return o.value.Interface(), strings.Join(append(o.keypath, o.format...), "/"), nil
 	}
 
 	// If the value is addressable, return a pointer
-	return o.value.Addr().Interface(), strings.Join(o.keypath, "/"), strings.Join(o.format, "/"), nil
+	return o.value.Addr().Interface(), strings.Join(append(o.keypath, o.format...), "/"), nil
 }
 
 // Encode part of the object stored at position key.

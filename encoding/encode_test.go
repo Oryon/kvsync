@@ -363,3 +363,91 @@ func TestUpdateKeyObject(t *testing.T) {
 		t.Errorf("Error\n")
 	}
 }
+
+type S8 struct {
+	A int `kvs:"A"`
+	B string
+	C float64
+}
+
+type S9 struct {
+	A S8             `kvs:"in/blob"`
+	B S8             `kvs:"sub/path/"`
+	C map[string]*S8 `kvs:"map1/{key}/in/here"`
+	D map[int]*S8    `kvs:"map2/{key}/"`
+}
+
+func testFindByField(t *testing.T, o interface{}, format string, fields []interface{}, ret_format string, expected error) interface{} {
+	o, f, err := FindByFields(o, format, fields)
+	if err != expected {
+		fmt.Printf("FAIL::::: FindByFields error '%v' instead of '%v'\n", err, expected)
+		t.Errorf("FindByFields error '%v' instead of '%v'", err, expected)
+		return nil
+	}
+	if f != ret_format {
+		fmt.Printf("FAIL::::: FindByFields returned format '%v' instead of '%v'\n", f, ret_format)
+		t.Errorf("FindByFields returned format '%v' instead of '%v'\n", f, ret_format)
+		return nil
+	}
+	return o
+}
+
+func TestFindByFieldsBasic(t *testing.T) {
+	s := S9{}
+	s.B.A = 1
+
+	o := testFindByField(t, &s, "store/here/", []interface{}{"B", "A"}, "store/here/sub/path/A", nil)
+	if *o.(*int) != 1 {
+		t.Errorf("Invalid value")
+	}
+
+	s.A.A = 2
+	o = testFindByField(t, &s, "store/here/", []interface{}{"A"}, "store/here/in/blob", nil)
+	if o.(*S8).A != 2 {
+		t.Errorf("Invalid value 2")
+	}
+
+	testFindByField(t, &s, "store/here/", []interface{}{"A", "A"}, "", errFindPathPastObject)
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key"}, "", errFindKeyNotFound)
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key", "A"}, "", errFindPathPastObject)
+
+	s.C = make(map[string]*S8)
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key"}, "", errFindKeyNotFound)
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key", "A"}, "", errFindPathPastObject)
+
+	s.C["key"] = &S8{
+		A: 1,
+		B: "test",
+	}
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key", "A"}, "", errFindPathPastObject)
+	o = testFindByField(t, &s, "store/here/", []interface{}{"C", "key"}, "store/here/map1/key/in/here", nil)
+	if o.(*S8).A != 1 || o.(*S8).B != "test" {
+		t.Errorf("Invalid value 3")
+	}
+
+	testFindByField(t, &s, "store/here/", []interface{}{"D", "key"}, "", errFindMapWrongType)
+	testFindByField(t, &s, "store/here/", []interface{}{"D", 1}, "", errFindKeyNotFound)
+
+	s.D = make(map[int]*S8)
+	testFindByField(t, &s, "store/here/", []interface{}{"D", 1}, "", errFindKeyNotFound)
+
+	s.D[1] = &S8{
+		A: 1,
+		B: "test",
+	}
+	o = testFindByField(t, &s, "store/here/", []interface{}{"D", 1}, "store/here/map2/1/", nil)
+	if o.(*S8).A != 1 || o.(*S8).B != "test" {
+		t.Errorf("Invalid value 3")
+	}
+
+	o = testFindByField(t, &s, "store/here/", []interface{}{"D", 1, "A"}, "store/here/map2/1/A", nil)
+	if *o.(*int) != 1 {
+		t.Errorf("Invalid value 2")
+	}
+
+	o = testFindByField(t, &s, "store/here/", []interface{}{"D", 1, "B"}, "store/here/map2/1/B", nil)
+	if *o.(*string) != "test" {
+		t.Errorf("Invalid value 2")
+	}
+
+}
