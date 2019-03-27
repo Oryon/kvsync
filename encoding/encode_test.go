@@ -174,6 +174,10 @@ func TestFindByKey0(t *testing.T) {
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.A, []interface{}{"A"})
 
+	o, fields, err = FindByKey(&s, "/root/", "/root/in/blob")
+	failIfError(t, err)
+	testFindByKeyResult(t, o, fields, &s.A, []interface{}{"A"})
+
 	o, fields, err = FindByKey(&s, "root/", "root/in/blob/")
 	failIfNotError(t, err)
 
@@ -404,6 +408,12 @@ func TestFindByFieldsBasic(t *testing.T) {
 	s.A.A = 2
 	o = testFindByField(t, &s, "store/here/", []interface{}{"A"}, "store/here/in/blob", nil)
 	if o.(*S8).A != 2 {
+		t.Errorf("Invalid value 2")
+	}
+
+	s.A.A = 3
+	o = testFindByField(t, &s, "/store/here/", []interface{}{"A"}, "/store/here/in/blob", nil)
+	if o.(*S8).A != 3 {
 		t.Errorf("Invalid value 2")
 	}
 

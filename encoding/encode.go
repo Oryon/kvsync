@@ -357,12 +357,8 @@ func findByFieldsPtr(o objectPath, fields []interface{}, opt findOptions) (objec
 
 func findByFieldsFormat(o objectPath, fields []interface{}) (objectPath, []interface{}, error) {
 	for len(o.format) != 0 {
-		if o.format[0] == "" {
+		if o.format[0] == "" && len(o.format) == 1 {
 			// This object is supposed to be encoded within the given key path
-			if len(o.format) != 1 {
-				// "" key element must be last
-				return o, nil, fmt.Errorf("Format contains an intermediate space")
-			}
 			break
 		} else if o.format[0] == "{key}" || o.format[0] == "{index}" {
 			//We stop here and can format a map or list element
@@ -621,12 +617,8 @@ func findByKeyPtr(o objectPath, path []string, opt findOptions) (objectPath, err
 
 func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) {
 	for len(o.format) != 0 {
-		if o.format[0] == "" {
+		if o.format[0] == "" && len(o.format) == 1 {
 			// This object is supposed to be encoded within the given key path
-			if len(o.format) != 1 {
-				// "" key element must be last
-				return o, nil, fmt.Errorf("Format contains an intermediate space")
-			}
 			break
 		} else if o.format[0] == "{key}" || o.format[0] == "{index}" {
 			//We stop here and can format a map, array or slice element
