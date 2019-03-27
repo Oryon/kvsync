@@ -115,6 +115,12 @@ func (etcd *Etcd) Next(c context.Context) (*kvs.Update, error) {
 	if r.PrevNode != nil {
 		prev = &r.PrevNode.Value
 	}
-	e := &kvs.Update{Key: r.Node.Key, Value: &r.Node.Value, Previous: prev}
+
+	var new *string = nil
+	if r.Action != "delete" {
+		new = &r.Node.Value
+	}
+
+	e := &kvs.Update{Key: r.Node.Key, Value: new, Previous: prev}
 	return e, nil
 }
