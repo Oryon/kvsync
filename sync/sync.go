@@ -1,8 +1,9 @@
-package encoding
+package sync
 
 import (
 	"context"
 	"fmt"
+	"github.com/Oryon/kvsync/encoding"
 	"github.com/Oryon/kvsync/kvs"
 	"strings"
 )
@@ -71,7 +72,7 @@ func (s *Sync) Next(c context.Context) error {
 	}
 
 	for _, v := range s.objects {
-		o, fields, err := FindByKey(v.Object, v.Format, e.Key)
+		o, fields, err := encoding.FindByKey(v.Object, v.Format, e.Key)
 		if err != nil {
 			continue
 		}

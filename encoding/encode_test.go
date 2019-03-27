@@ -7,6 +7,26 @@ import (
 	"testing"
 )
 
+func failIfError(t *testing.T, err error) {
+	if err != nil {
+		fmt.Printf("FAIL::::: Error: %v\n", err)
+		t.Errorf("Error: %v", err)
+	}
+}
+
+func failIfNotError(t *testing.T, err error) {
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+}
+
+func failIfErrorDifferent(t *testing.T, err error, expected error) {
+	if err != expected {
+		fmt.Printf("FAIL::::: Error '%v' differs from expected '%v'\n", err, expected)
+		t.Errorf("Error '%v' differs from expected '%v'", err, expected)
+	}
+}
+
 type S1 struct {
 	A int
 	B string
