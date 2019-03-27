@@ -51,7 +51,7 @@ As with other objects, storing/syncing/retrieving a `map` with format `/store/ma
 
 By appending `/{key}<element-format>` to the format, each map element gets stored using format `<map-format>/{key}<element-format>`, with the `{key}` string replaced with the object key.
 
-For instance, using format `/map/here/{key}`, element in m["42"] would be stored as JSON at key `/map/here/42`, whereas using key `/map/here/{key}/` would recursively store each object with format `/map/here/42`.
+For instance, using format `/map/here/{key}`, element in m["42"] would be stored as JSON at key `/map/here/42`, whereas using key `/map/here/{key}/` would recursively store the object with format `/map/here/42/`.
 
 
 ## Change notifications
