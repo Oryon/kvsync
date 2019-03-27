@@ -10,8 +10,11 @@ import (
 // SyncEvent is used to notify a change on a watched object
 // as well as diving into the changed element of the object.
 type SyncEvent struct {
+
+	// The modified object
 	Object interface{}
-	Key    string
+
+	// The list of fields pointing to the modified field from the object.
 	fields []interface{}
 }
 
@@ -45,7 +48,7 @@ func (se *SyncEvent) GetIndex(index *int) *SyncEvent {
 }
 
 type SyncObject struct {
-	Key      string
+	Format   string
 	Object   interface{}
 	Callback SyncCallback
 }
@@ -62,6 +65,23 @@ type Sync struct {
 func (s *Sync) Next(c context.Context) error {
 	s.initIfNot()
 
+	e, err := s.Sync.Next(c)
+	if err != nil {
+		return err
+	}
+
+	for _, v := range s.objects {
+		o, fields, err := FindByKey(v.Object, v.Format, e.Key)
+		if err != nil {
+			continue
+		}
+		event := SyncEvent{
+			Object: o,
+			fields: fields,
+		}
+		v.Callback(&event)
+	}
+
 	return nil
 }
 
@@ -70,7 +90,7 @@ func (s *Sync) SyncObject(o SyncObject) error {
 	s.initIfNot()
 
 	for _, v := range s.objects {
-		if prefixCollision(o.Key, v.Key) {
+		if prefixCollision(o.Format, v.Format) {
 			return fmt.Errorf("Cannot watch objects in overlaping key spaces.")
 		}
 	}
@@ -87,7 +107,7 @@ func (s *Sync) SyncObject(o SyncObject) error {
 func (s *Sync) UnsyncObject(key string) error {
 	s.initIfNot()
 	for k, v := range s.objects {
-		if v.Key == key {
+		if v.Format == key {
 			delete(s.objects, k)
 			//TODO: Unregister watcher on KVS
 			return nil
