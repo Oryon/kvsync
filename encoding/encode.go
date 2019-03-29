@@ -90,6 +90,10 @@ func getStructFieldFormat(f reflect.StructField) ([]string, error) {
 }
 
 func serializeValue(v reflect.Value) (string, error) {
+	if v.Type().Kind() == reflect.String {
+		return v.Interface().(string), nil
+	}
+
 	arr, err := json.Marshal(v.Interface())
 	if err != nil {
 		return "", err
@@ -99,6 +103,11 @@ func serializeValue(v reflect.Value) (string, error) {
 
 func unserializeValue(val string, t reflect.Type) (reflect.Value, error) {
 	v := reflect.New(t).Elem()
+	if t.Kind() == reflect.String {
+		v.Set(reflect.ValueOf(val))
+		return v, nil
+	}
+
 	err := json.Unmarshal([]byte(val), v.Addr().Interface())
 	if err != nil {
 		return reflect.Zero(t), err
@@ -502,6 +511,10 @@ func findByKeyOneStruct(o objectPath, path []string, opt findOptions) (objectPat
 	t := o.vtype
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
+		if f.PkgPath != "" {
+			// Attribute is not exported
+			continue
+		}
 
 		format, err := getStructFieldFormat(f)
 		if err != nil {

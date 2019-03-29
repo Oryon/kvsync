@@ -71,7 +71,7 @@ func TestJSONMArshall(t *testing.T) {
 
 	c = make(map[string]string)
 	c["/here/A"] = "1"
-	c["/here/B"] = "\"test\""
+	c["/here/B"] = "test"
 	c["/here/C"] = "3.3"
 
 	testEncode(t, "/here/", &o, c)
@@ -85,7 +85,7 @@ func TestJSONMArshall(t *testing.T) {
 	c = make(map[string]string)
 	c["/here/custom"] = "{\"A\":1,\"B\":\"test\",\"C\":3.3}"
 	c["/here/sub/A"] = "1"
-	c["/here/sub/B"] = "\"test\""
+	c["/here/sub/B"] = "test"
 	c["/here/sub/C"] = "3.3"
 
 	testEncode(t, "/here/", &o2, c)
@@ -93,7 +93,7 @@ func TestJSONMArshall(t *testing.T) {
 
 	c = make(map[string]string)
 	c["/here/sub/A"] = "1"
-	c["/here/sub/B"] = "\"test\""
+	c["/here/sub/B"] = "test"
 	c["/here/sub/C"] = "3.3"
 	testEncode(t, "/here/", &o2, c, "B")
 	testEncode(t, "/here/", o2, c, "B")
@@ -131,7 +131,7 @@ func TestMap(t *testing.T) {
 	testEncode(t, "/here/", o, c, "A")
 
 	c["/here/prev/1/A"] = "4"
-	c["/here/prev/1/B"] = "\"test2\""
+	c["/here/prev/1/B"] = "test2"
 	c["/here/prev/1/C"] = "3.5"
 	testEncode(t, "/here/", o, c, "B")
 
@@ -141,14 +141,14 @@ func TestMap(t *testing.T) {
 		C: 0,
 	}
 	c["/here/prev/4/A"] = "0"
-	c["/here/prev/4/B"] = "\"test3\""
+	c["/here/prev/4/B"] = "test3"
 	c["/here/prev/4/C"] = "0"
 
 	testEncode(t, "/here/", o, c, "B")
 	testEncode(t, "/here/", o, c)
 
 	o.A["nyu"] = "test6"
-	c["/here/nyu/after"] = "\"test6\""
+	c["/here/nyu/after"] = "test6"
 	testEncode(t, "/here/", o, c)
 
 }
