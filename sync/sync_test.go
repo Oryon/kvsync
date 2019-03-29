@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"fmt"
 	"github.com/Oryon/kvsync/kvs/gomap"
 	"testing"
@@ -58,4 +59,67 @@ func TestBasicSyncUnSync(t *testing.T) {
 		Format: "/test/key2",
 	})
 	failIfError(t, err)
+}
+
+type S1 struct {
+	A int
+}
+
+type S2 struct {
+	S S1 `kvs:"S/"`
+	B string
+	M map[int]S1 `kvs:"map/{key}/s1/"`
+}
+
+var lastEvent *SyncEvent
+
+func expectSyncEventCB(e *SyncEvent) error {
+	fmt.Printf("event %v\n", e)
+	lastEvent = e
+	return nil
+}
+
+func TestBasicNext(t *testing.T) {
+	gm := gomap.Create()
+
+	s := Sync{
+		Sync: gm,
+	}
+
+	st := S2{}
+
+	var err error
+
+	err = s.SyncObject(SyncObject{
+		Format:   "/o/",
+		Object:   &st,
+		Callback: expectSyncEventCB,
+	})
+	failIfError(t, err)
+
+	err = gm.Set(context.Background(), "/o/B", "nya")
+	failIfError(t, err)
+
+	lastEvent = nil
+	s.Next(context.Background())
+	if str, err := lastEvent.Field("B").String(); err == nil {
+		if str != "nya" {
+			t.Errorf("Wrong value")
+		}
+	} else {
+		t.Errorf("Returned %v", err)
+	}
+
+	err = gm.Set(context.Background(), "/o/S/A", "5")
+	failIfError(t, err)
+
+	lastEvent = nil
+	s.Next(context.Background())
+	if i, err := lastEvent.Field("S").Field("A").Int(); err == nil {
+		if i != 5 {
+			t.Errorf("Wrong value")
+		}
+	} else {
+		t.Errorf("Returned %v", err)
+	}
 }
