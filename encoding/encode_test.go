@@ -38,13 +38,6 @@ type S2 struct {
 	B S1 `kvs:"sub/"`
 }
 
-func TestBasic(t *testing.T) {
-	_, e := Encode("here", 1)
-	if e != ErrFirstSlash {
-		t.Errorf("Incorrect error returned")
-	}
-}
-
 func testEncode(t *testing.T, key string, obj interface{}, truth map[string]string, fields ...interface{}) {
 	m, e := Encode(key, obj, fields...)
 	if e != nil {
@@ -202,13 +195,13 @@ func TestFindByKey0(t *testing.T) {
 	failIfNotError(t, err)
 
 	o, fields, err = FindByKey(&s, "root/", "root/in/blob/nya")
-	failIfErrorDifferent(t, err, errFindPathPastObject)
+	failIfErrorDifferent(t, err, ErrFindPathPastObject)
 
 	o, fields, err = FindByKey(&s, "root/", "rot/in/blob")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "root/", "root/in2/blob")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	// S5.A in blob without root
 	o, fields, err = FindByKey(&s, "", "in/blob")
@@ -216,21 +209,21 @@ func TestFindByKey0(t *testing.T) {
 	testFindByKeyResult(t, o, fields, &s.A, []interface{}{"A"})
 
 	o, fields, err = FindByKey(&s, "", "in2/blob")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "in/blob/")
-	failIfErrorDifferent(t, err, errFindPathPastObject)
+	failIfErrorDifferent(t, err, ErrFindPathPastObject)
 
 	// S5.B as a subpath without root
 	o, fields, err = FindByKey(&s, "", "sub/path")
-	failIfErrorDifferent(t, err, errFindKeyInvalid)
+	failIfErrorDifferent(t, err, ErrFindKeyInvalid)
 
 	o, fields, err = FindByKey(&s, "", "sub/path/")
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.B, []interface{}{"B"})
 
 	o, fields, err = FindByKey(&s, "", "sub/")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "sub")
 	failIfNotError(t, err)
@@ -248,13 +241,13 @@ func TestFindByKey0(t *testing.T) {
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 	o, fields, err = FindByKey(&s, "", "map1/testkey")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey/")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey/nnn")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	s.C = make(map[string]*S4)
 	o, fields, err = FindByKey(&s, "", "map1/")
@@ -262,12 +255,12 @@ func TestFindByKey0(t *testing.T) {
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 	o, fields, err = FindByKey(&s, "", "map1/testkey/")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey/nnn")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	s.C["testkey"] = &s.A
 
@@ -276,13 +269,13 @@ func TestFindByKey0(t *testing.T) {
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey/")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey/in")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey/in/here")
 	failIfError(t, err)
@@ -295,18 +288,18 @@ func TestFindByKey0(t *testing.T) {
 	testFindByKeyResult(t, o, fields, &s.D, []interface{}{"D"})
 
 	o, fields, err = FindByKey(&s, "", "map2/111")
-	failIfErrorDifferent(t, err, errFindKeyInvalid)
+	failIfErrorDifferent(t, err, ErrFindKeyInvalid)
 
 	o, fields, err = FindByKey(&s, "", "map2/111/")
-	failIfErrorDifferent(t, err, errFindKeyNotFound)
+	failIfErrorDifferent(t, err, ErrFindKeyNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map2/111/nnn")
-	failIfErrorDifferent(t, err, errFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	s.D[111] = &s.A
 
 	o, fields, err = FindByKey(&s, "", "map2/111")
-	failIfErrorDifferent(t, err, errFindKeyInvalid)
+	failIfErrorDifferent(t, err, ErrFindKeyInvalid)
 
 	o, fields, err = FindByKey(&s, "", "map2/111/")
 	failIfError(t, err)
@@ -437,29 +430,29 @@ func TestFindByFieldsBasic(t *testing.T) {
 		t.Errorf("Invalid value 2")
 	}
 
-	testFindByField(t, &s, "store/here/", []interface{}{"A", "A"}, "", errFindPathPastObject)
-	testFindByField(t, &s, "store/here/", []interface{}{"C", "key"}, "", errFindKeyNotFound)
-	testFindByField(t, &s, "store/here/", []interface{}{"C", "key", "A"}, "", errFindPathPastObject)
+	testFindByField(t, &s, "store/here/", []interface{}{"A", "A"}, "", ErrFindPathPastObject)
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key"}, "", ErrFindKeyNotFound)
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key", "A"}, "", ErrFindPathPastObject)
 
 	s.C = make(map[string]*S8)
-	testFindByField(t, &s, "store/here/", []interface{}{"C", "key"}, "", errFindKeyNotFound)
-	testFindByField(t, &s, "store/here/", []interface{}{"C", "key", "A"}, "", errFindPathPastObject)
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key"}, "", ErrFindKeyNotFound)
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key", "A"}, "", ErrFindPathPastObject)
 
 	s.C["key"] = &S8{
 		A: 1,
 		B: "test",
 	}
-	testFindByField(t, &s, "store/here/", []interface{}{"C", "key", "A"}, "", errFindPathPastObject)
+	testFindByField(t, &s, "store/here/", []interface{}{"C", "key", "A"}, "", ErrFindPathPastObject)
 	o = testFindByField(t, &s, "store/here/", []interface{}{"C", "key"}, "store/here/map1/key/in/here", nil)
 	if o.(*S8).A != 1 || o.(*S8).B != "test" {
 		t.Errorf("Invalid value 3")
 	}
 
-	testFindByField(t, &s, "store/here/", []interface{}{"D", "key"}, "", errFindMapWrongType)
-	testFindByField(t, &s, "store/here/", []interface{}{"D", 1}, "", errFindKeyNotFound)
+	testFindByField(t, &s, "store/here/", []interface{}{"D", "key"}, "", ErrFindMapWrongType)
+	testFindByField(t, &s, "store/here/", []interface{}{"D", 1}, "", ErrFindKeyNotFound)
 
 	s.D = make(map[int]*S8)
-	testFindByField(t, &s, "store/here/", []interface{}{"D", 1}, "", errFindKeyNotFound)
+	testFindByField(t, &s, "store/here/", []interface{}{"D", 1}, "", ErrFindKeyNotFound)
 
 	s.D[1] = &S8{
 		A: 1,

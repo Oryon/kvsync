@@ -11,17 +11,17 @@ import (
 var ErrFirstSlash = errors.New("Key must start with /")
 var ErrWrongFieldType = errors.New("Provided field is of wrong type")
 var ErrWrongFieldName = errors.New("Provided field does not exist")
-var errNotImplemented = errors.New("Not implemented")
-var errUnsupportedType = errors.New("Object type not supported")
-var errFindPathPastObject = errors.New("Provided path goes past an encoded object")
-var errFindKeyNotFound = errors.New("Key was not found in map")
-var errFindKeyInvalid = errors.New("Invalid key for this object")
-var errFindPathNotFound = errors.New("Object not found at specified path")
-var errFindSetNoExists = errors.New("Cannot set non existent object")
-var errFindSetWrongType = errors.New("The provided object is of wrong type")
-var errScalarType = errors.New("Cannot recursively store scalar type")
-var errTagFirstSlash = errors.New("Structure field tag cannot start with /")
-var errFindMapWrongType = errors.New("Provided map key field is of wrong type")
+var ErrNotImplemented = errors.New("Not implemented")
+var ErrUnsupportedType = errors.New("Object type not supported")
+var ErrFindPathPastObject = errors.New("Provided path goes past an encoded object")
+var ErrFindKeyNotFound = errors.New("Key was not found in map")
+var ErrFindKeyInvalid = errors.New("Invalid key for this object")
+var ErrFindPathNotFound = errors.New("Object not found at specified path")
+var ErrFindSetNoExists = errors.New("Cannot set non existent object")
+var ErrFindSetWrongType = errors.New("The provided object is of wrong type")
+var ErrScalarType = errors.New("Cannot recursively store scalar type")
+var ErrTagFirstSlash = errors.New("Structure field tag cannot start with /")
+var ErrFindMapWrongType = errors.New("Provided map key field is of wrong type")
 
 // State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {
@@ -83,7 +83,7 @@ func getStructFieldFormat(f reflect.StructField) ([]string, error) {
 	if tag == "" {
 		return []string{f.Name}, nil
 	} else if tag[:1] == "/" {
-		return nil, errTagFirstSlash
+		return nil, ErrTagFirstSlash
 	} else {
 		return strings.Split(tag, "/"), nil
 	}
@@ -230,13 +230,13 @@ func (state *encodeState) encode(o objectPath) error {
 	case reflect.Map:
 		return state.encodeMap(o)
 	case reflect.Slice:
-		return errNotImplemented
+		return ErrNotImplemented
 	case reflect.Array:
-		return errNotImplemented
+		return ErrNotImplemented
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Invalid, reflect.UnsafePointer:
-		return errUnsupportedType
+		return ErrUnsupportedType
 	default:
-		return errScalarType
+		return ErrScalarType
 	}
 }
 
@@ -252,7 +252,7 @@ func findByFieldsMap(o objectPath, fields []interface{}, opt findOptions) (objec
 	key_type := o.vtype.Key()
 	key := reflect.ValueOf(fields[0])
 	if key.Type() != key_type {
-		return o, nil, errFindMapWrongType
+		return o, nil, ErrFindMapWrongType
 	}
 
 	keystr, err := serializeMapKey(key)
@@ -417,7 +417,7 @@ func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPa
 		// return it with the reduced key.
 		// For now let's just return an error.
 		if len(fields) != 0 {
-			return o, nil, errFindPathPastObject
+			return o, nil, ErrFindPathPastObject
 		}
 	}
 
@@ -427,13 +427,13 @@ func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPa
 	case reflect.Map:
 		return findByFieldsMap(o, fields, opt)
 	case reflect.Slice:
-		return o, nil, errNotImplemented
+		return o, nil, ErrNotImplemented
 	case reflect.Array:
-		return o, nil, errNotImplemented
+		return o, nil, ErrNotImplemented
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Invalid, reflect.UnsafePointer:
-		return o, nil, errUnsupportedType
+		return o, nil, ErrUnsupportedType
 	default:
-		return o, nil, errScalarType
+		return o, nil, ErrScalarType
 	}
 }
 
@@ -453,7 +453,7 @@ func FindByFields(object interface{}, format string, fields []interface{}) (inte
 	}
 
 	if !o.value.IsValid() {
-		return nil, "", errFindKeyNotFound
+		return nil, "", ErrFindKeyNotFound
 	}
 
 	if !o.value.CanAddr() {
@@ -470,18 +470,15 @@ func FindByFields(object interface{}, format string, fields []interface{}) (inte
 // Structure attributes are identified by name (as a string).
 // Slice indexes are identified with integers.
 // Map keys are identified by given an object of the same type than the map key.
-func Encode(key string, object interface{}, fields ...interface{}) (map[string]string, error) {
+func Encode(format string, object interface{}, fields ...interface{}) (map[string]string, error) {
 
-	keypath := strings.Split(key, "/")
-	if len(keypath) == 0 || keypath[0] != "" {
-		return nil, ErrFirstSlash
-	}
+	formatpath := strings.Split(format, "/")
 
 	o := objectPath{
 		value:   reflect.ValueOf(object),
 		vtype:   reflect.TypeOf(object),
-		format:  keypath[1:],
-		keypath: []string{""},
+		format:  formatpath,
+		keypath: []string{},
 	}
 
 	o, _, err := findByFields(o, fields, findOptions{})
@@ -536,7 +533,7 @@ func findByKeyOneStruct(o objectPath, path []string, opt findOptions) (objectPat
 		}
 		// Let's continue searching
 	}
-	return o, errFindPathNotFound
+	return o, ErrFindPathNotFound
 }
 
 // Finds a sub-object inside a map with the provided object format (e.g. {key}, {key}/, {key}/name).
@@ -638,7 +635,7 @@ func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) 
 			break
 		} else if len(path) == 0 || o.format[0] != path[0] {
 			// Provided path does not match the expected format
-			return o, path, errFindPathNotFound
+			return o, path, ErrFindPathNotFound
 		} else {
 			// Pile-up key and continue
 			o.keypath = append(o.keypath, path[0])
@@ -670,7 +667,7 @@ func findByKeySetMaybe(o objectPath, path []string, opt findOptions) (objectPath
 
 	// Can only set if the value exists (opt.Create should be set if intent is to create too)
 	if !o.value.IsValid() {
-		return o, errFindSetNoExists
+		return o, ErrFindSetNoExists
 	}
 
 	// If object cannot be set, try to rollback
@@ -692,7 +689,7 @@ func findByKeySetMaybe(o objectPath, path []string, opt findOptions) (objectPath
 
 	// Check the type
 	if value.Type() != o.vtype {
-		return o, errFindSetWrongType
+		return o, ErrFindSetWrongType
 	}
 
 	// Set the value
@@ -716,14 +713,14 @@ func findByKey(o objectPath, path []string, opt findOptions) (objectPath, error)
 		// The object is supposed to be encoded as a blob
 		if len(path) != 0 {
 			// Path is too specific and therefore does not correspond to an encoded object.
-			return o, errFindPathPastObject
+			return o, ErrFindPathPastObject
 		}
 		return findByKeySetMaybe(o, path, opt)
 	}
 
 	if len(path) == 0 || (path[0] == "" && len(path) != 1) {
 		// We reached the end of the requested path but the object expects more.
-		return o, errFindKeyInvalid
+		return o, ErrFindKeyInvalid
 	}
 
 	if path[0] == "" {
@@ -736,13 +733,13 @@ func findByKey(o objectPath, path []string, opt findOptions) (objectPath, error)
 	case reflect.Map:
 		return findByKeyOneMap(o, path, opt)
 	case reflect.Slice:
-		return o, errNotImplemented
+		return o, ErrNotImplemented
 	case reflect.Array:
-		return o, errNotImplemented
+		return o, ErrNotImplemented
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Invalid, reflect.UnsafePointer:
-		return o, errUnsupportedType
+		return o, ErrUnsupportedType
 	default:
-		return o, errScalarType
+		return o, ErrScalarType
 	}
 }
 
@@ -767,7 +764,7 @@ func FindByKey(o interface{}, format string, path string) (interface{}, []interf
 	}
 
 	if !op.value.IsValid() {
-		return nil, nil, errFindKeyNotFound
+		return nil, nil, ErrFindKeyNotFound
 	}
 
 	if !op.value.CanAddr() {
