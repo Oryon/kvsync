@@ -14,9 +14,11 @@ var ErrNoMoreFields = errors.New("No more fields to consume")
 var ErrNotAStruct = errors.New("Object is not a structure")
 var ErrNotAMap = errors.New("Object is not an array")
 var ErrNotAString = errors.New("Object is not a string")
+var ErrKeyMustPtr = errors.New("Provided key must be a pointer")
 var ErrWrongKeyType = errors.New("Provided key pointer type mismatch")
 var ErrNotThisPath = errors.New("The modified object is not on this path")
 var ErrNotImplemented = errors.New("This is not implemented")
+var ErrNilPointer = errors.New("Reached nil pointer")
 
 // SyncEvent is used to notify a change on a watched object
 // as well as diving into the changed element of the object.
@@ -35,7 +37,7 @@ type SyncEvent struct {
 type SyncCallback func(eventPath *SyncEvent) error
 
 // Dives into the object
-func (se *SyncEvent) Field(name string) *SyncEvent {
+func (se SyncEvent) Field(name string) SyncEvent {
 	// First dereference pointers
 	se = se.derefPointers()
 	if se.err != nil {
@@ -68,7 +70,7 @@ func (se *SyncEvent) Field(name string) *SyncEvent {
 
 // When the change is associated with a an element of a map,
 // it might be useful to get the value used as key in this map.
-func (se *SyncEvent) Value(key *interface{}) *SyncEvent {
+func (se SyncEvent) Value(key interface{}) SyncEvent {
 	// First dereference pointers
 	se = se.derefPointers()
 	if se.err != nil {
@@ -87,11 +89,16 @@ func (se *SyncEvent) Value(key *interface{}) *SyncEvent {
 	}
 
 	if key != nil {
-		if reflect.TypeOf(*key) != se.current_object.Type().Key() {
+		k := reflect.ValueOf(key)
+		if k.Type().Kind() != reflect.Ptr {
+			se.err = ErrKeyMustPtr
+			return se
+		}
+		if k.Type().Elem() != se.current_object.Type().Key() {
 			se.err = ErrWrongKeyType
 			return se
 		}
-		*key = se.fields[0]
+		k.Elem().Set(reflect.ValueOf(se.fields[0]))
 	}
 	se.current_object = se.current_object.MapIndex(reflect.ValueOf(se.fields[0]))
 	se.fields = se.fields[1:]
@@ -100,7 +107,7 @@ func (se *SyncEvent) Value(key *interface{}) *SyncEvent {
 
 // When the change is associated with a an element of an array,
 // this will return the index of the changed element.
-func (se *SyncEvent) GetIndex(index *int) *SyncEvent {
+func (se SyncEvent) GetIndex(index *int) SyncEvent {
 	if se.err != nil {
 		return se
 	}
@@ -109,18 +116,18 @@ func (se *SyncEvent) GetIndex(index *int) *SyncEvent {
 	return se
 }
 
-func (se *SyncEvent) Error() error {
+func (se SyncEvent) Error() error {
 	return se.err
 }
 
-func (se *SyncEvent) Current() (interface{}, error) {
+func (se SyncEvent) Current() (interface{}, error) {
 	if se.err != nil {
 		return nil, se.err
 	}
 	return se.current_object.Interface(), nil
 }
 
-func (se *SyncEvent) String() (string, error) {
+func (se SyncEvent) String() (string, error) {
 	if se.err != nil {
 		return "", se.err
 	}
@@ -131,7 +138,7 @@ func (se *SyncEvent) String() (string, error) {
 	return str, nil
 }
 
-func (se *SyncEvent) Int() (int, error) {
+func (se SyncEvent) Int() (int, error) {
 	if se.err != nil {
 		return 0, se.err
 	}
@@ -142,14 +149,11 @@ func (se *SyncEvent) Int() (int, error) {
 	return i, nil
 }
 
-func (se *SyncEvent) derefPointers() *SyncEvent {
-	if se == nil {
-		return nil
-	}
-
+func (se SyncEvent) derefPointers() SyncEvent {
 	for se.current_object.Type().Kind() == reflect.Ptr {
 		if se.current_object.IsNil() {
-			return nil
+			se.err = ErrNilPointer
+			return se
 		}
 		se.current_object = se.current_object.Elem()
 	}
