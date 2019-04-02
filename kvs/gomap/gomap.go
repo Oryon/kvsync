@@ -110,3 +110,7 @@ func (m *Gomap) Get(c context.Context, key string) (string, error) {
 	}
 	return v, nil
 }
+
+func (m *Gomap) GetBackingMap() map[string]string {
+	return m.gomap
+}
