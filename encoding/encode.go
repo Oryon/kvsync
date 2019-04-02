@@ -241,24 +241,24 @@ func (state *encodeState) encode(o objectPath) error {
 	}
 }
 
-func findByFieldsMap(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
+func findByFieldsMap(o objectPath, fields []interface{}, opt findOptions) (objectPath, error) {
 	o2 := o
 	o.lastMapIndirection = &o2
 
 	if len(o.format) == 0 || o.format[0] != "{key}" {
-		return o, fields, fmt.Errorf("Map format must contain a '{key}' element")
+		return o, fmt.Errorf("Map format must contain a '{key}' element")
 	}
 	o.format = o.format[1:] //Remove "{key}" from format
 
 	key_type := o.vtype.Key()
 	key := reflect.ValueOf(fields[0])
 	if key.Type() != key_type {
-		return o, nil, ErrFindKeyWrongType
+		return o, ErrFindKeyWrongType
 	}
 
 	keystr, err := serializeMapKey(key)
 	if err != nil {
-		return o, nil, err
+		return o, err
 	}
 
 	m := o.value
@@ -302,34 +302,34 @@ func findByFieldsMap(o objectPath, fields []interface{}, opt findOptions) (objec
 
 		o.value = val.Elem()
 		opt.MakeMapAddressable = false
-		o, fields, err = findByFields(o, fields[1:], opt) //Iterate on the addressable value
+		o, err = findByFields(o, fields[1:], opt) //Iterate on the addressable value
 		if err != nil {
-			return o, nil, err
+			return o, err
 		}
 		m.SetMapIndex(key, val.Elem()) // Set the addressable value in the map
-		return o, fields, err
+		return o, err
 	} else {
 		// Iterate within the object
 		return findByFields(o, fields[1:], opt)
 	}
 }
 
-func findByFieldsStruct(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
+func findByFieldsStruct(o objectPath, fields []interface{}, opt findOptions) (objectPath, error) {
 
 	name, ok := fields[0].(string)
 	if !ok {
-		return o, nil, ErrWrongFieldType
+		return o, ErrWrongFieldType
 	}
 	fields = fields[1:]
 
 	f, ok := o.vtype.FieldByName(name)
 	if !ok {
-		return o, nil, ErrWrongFieldName
+		return o, ErrWrongFieldName
 	}
 
 	format, err := getStructFieldFormat(f)
 	if err != nil {
-		return o, fields, err
+		return o, err
 	}
 
 	if o.value.IsValid() {
@@ -342,7 +342,7 @@ func findByFieldsStruct(o objectPath, fields []interface{}, opt findOptions) (ob
 	return findByFields(o, fields, opt)
 }
 
-func findByFieldsPtr(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
+func findByFieldsPtr(o objectPath, fields []interface{}, opt findOptions) (objectPath, error) {
 	if o.value.IsValid() { // Value represents an actual pointer
 		if o.value.Elem().IsValid() {
 			// Pointer contains a valide value
@@ -382,9 +382,9 @@ func findByFieldsFormat(o objectPath, fields []interface{}) (objectPath, []inter
 	return o, fields, nil
 }
 
-func findByFieldsRevertAddressable(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
+func findByFieldsRevertAddressable(o objectPath, fields []interface{}, opt findOptions) (objectPath, error) {
 	if o.lastMapIndirection == nil {
-		return o, nil, fmt.Errorf("Object is not addressable")
+		return o, fmt.Errorf("Object is not addressable")
 	}
 
 	fields = append(o.fields[len(o.lastMapIndirection.fields):], fields...) // Reconstruct the fields before they were consumed
@@ -394,7 +394,7 @@ func findByFieldsRevertAddressable(o objectPath, fields []interface{}, opt findO
 }
 
 // Goes directely down an object
-func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPath, []interface{}, error) {
+func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPath, error) {
 	// First we always dereference pointers, even though the value may become invalid
 	if o.vtype.Kind() == reflect.Ptr {
 		return findByFieldsPtr(o, fields, opt)
@@ -402,14 +402,14 @@ func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPa
 
 	o, fields, err := findByFieldsFormat(o, fields)
 	if err != nil {
-		return o, nil, err
+		return o, err
 	}
 
 	// Now we have removed all leading objects
 
 	if len(fields) == 0 {
 		// This is the end of the journey, buddy.
-		return o, fields, nil
+		return o, nil
 	}
 
 	if len(o.format) == 0 {
@@ -418,7 +418,7 @@ func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPa
 		// return it with the reduced key.
 		// For now let's just return an error.
 		if len(fields) != 0 {
-			return o, nil, ErrFindPathPastObject
+			return o, ErrFindPathPastObject
 		}
 	}
 
@@ -428,13 +428,13 @@ func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPa
 	case reflect.Map:
 		return findByFieldsMap(o, fields, opt)
 	case reflect.Slice:
-		return o, nil, ErrNotImplemented
+		return o, ErrNotImplemented
 	case reflect.Array:
-		return o, nil, ErrNotImplemented
+		return o, ErrNotImplemented
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Invalid, reflect.UnsafePointer:
-		return o, nil, ErrUnsupportedType
+		return o, ErrUnsupportedType
 	default:
-		return o, nil, ErrScalarType
+		return o, ErrScalarType
 	}
 }
 
@@ -448,7 +448,7 @@ func FindByFields(object interface{}, format string, fields []interface{}) (inte
 		format: strings.Split(format, "/"),
 	}
 
-	o, _, err := findByFields(o, fields, findOptions{})
+	o, err := findByFields(o, fields, findOptions{})
 	if err != nil {
 		return nil, "", err
 	}
@@ -482,7 +482,7 @@ func Encode(format string, object interface{}, fields ...interface{}) (map[strin
 		keypath: []string{},
 	}
 
-	o, _, err := findByFields(o, fields, findOptions{})
+	o, err := findByFields(o, fields, findOptions{})
 	if err != nil {
 		return nil, err
 	}
