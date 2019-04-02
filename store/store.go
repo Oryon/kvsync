@@ -10,7 +10,7 @@ import (
 var ErrNotImplemented = errors.New("Not implemented")
 
 // Puts an object into the key-value store
-func Set(s kvs.Store, c context.Context, object interface{}, format string, fields ...interface{}) error {
+func Store(s kvs.Store, c context.Context, object interface{}, format string, fields ...interface{}) error {
 	m, err := encoding.Encode(format, object, fields...)
 	if err != nil {
 		return err

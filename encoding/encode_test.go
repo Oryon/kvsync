@@ -448,7 +448,7 @@ func TestFindByFieldsBasic(t *testing.T) {
 		t.Errorf("Invalid value 3")
 	}
 
-	testFindByField(t, &s, "store/here/", []interface{}{"D", "key"}, "", ErrFindMapWrongType)
+	testFindByField(t, &s, "store/here/", []interface{}{"D", "key"}, "", ErrFindKeyWrongType)
 	testFindByField(t, &s, "store/here/", []interface{}{"D", 1}, "", ErrFindKeyNotFound)
 
 	s.D = make(map[int]*S8)

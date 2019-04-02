@@ -19,8 +19,8 @@ type S2 struct {
 	M map[int]S1 `kvs:"map/{key}/s1/"`
 }
 
-func testSet(t *testing.T, gm *gomap.Gomap, obj interface{}, format string, truth map[string]string, err error, fields ...interface{}) {
-	e := Set(gm, context.Background(), obj, format, fields...)
+func testStore(t *testing.T, gm *gomap.Gomap, obj interface{}, format string, truth map[string]string, err error, fields ...interface{}) {
+	e := Store(gm, context.Background(), obj, format, fields...)
 	if e != err {
 		fmt.Printf("FAIL::::: Set returned %v\n", e)
 		t.Errorf("Set returned %v", e)
@@ -39,20 +39,29 @@ func TestStore(t *testing.T) {
 
 	m["/here/B"] = ""
 	m["/here/S/A"] = "0"
-	testSet(t, gm, &st, "/here/", m, nil)
+	testStore(t, gm, &st, "/here/", m, nil)
 
 	st.B = "test"
-	testSet(t, gm, &st, "/here/", m, nil, "S")
-	testSet(t, gm, &st, "/here/", m, nil, "M")
+	testStore(t, gm, &st, "/here/", m, nil, "S")
+	testStore(t, gm, &st, "/here/", m, nil, "M")
 
 	m["/here/B"] = "test"
-	testSet(t, gm, &st, "/here/", m, nil, "B")
+	testStore(t, gm, &st, "/here/", m, nil, "B")
 
 	m["/here/B"] = "test"
-	testSet(t, gm, &st, "/here/", m, nil, "B")
+	testStore(t, gm, &st, "/here/", m, nil, "B")
 
-	//testSet(t, gm, &st, "/here/", m, encoding.ErrFindPathPastObject, "M", 2)
-	//testSet(t, gm, &st, "/here/", m, encoding.ErrFindPathPastObject, "B", "nya")
+	testStore(t, gm, &st, "/here/", m, encoding.ErrFindObjectNotFound, "M", 2)
+	testStore(t, gm, &st, "/here/", m, encoding.ErrFindKeyWrongType, "M", "nya")
+
+	m["/here/S/A"] = "1"
+	st.S.A = 1
+	testStore(t, gm, &st, "/here/", m, nil, "S", "A")
+
+	st.M = make(map[int]S1)
+	st.M[2] = S1{123}
+	m["/here/map/2/s1/A"] = "123"
+	testStore(t, gm, &st, "/here/", m, nil, "M", 2, "A")
 
 	//m["/here"] = "{\"A\":1,\"B\":\"test\",\"C\":3.3}"
 	//testEncode(t, "/here", &o, c)

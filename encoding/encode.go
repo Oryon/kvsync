@@ -14,6 +14,7 @@ var ErrWrongFieldName = errors.New("Provided field does not exist")
 var ErrNotImplemented = errors.New("Not implemented")
 var ErrUnsupportedType = errors.New("Object type not supported")
 var ErrFindPathPastObject = errors.New("Provided path goes past an encoded object")
+var ErrFindObjectNotFound = errors.New("Object was not found")
 var ErrFindKeyNotFound = errors.New("Key was not found in map")
 var ErrFindKeyInvalid = errors.New("Invalid key for this object")
 var ErrFindPathNotFound = errors.New("Object not found at specified path")
@@ -21,7 +22,7 @@ var ErrFindSetNoExists = errors.New("Cannot set non existent object")
 var ErrFindSetWrongType = errors.New("The provided object is of wrong type")
 var ErrScalarType = errors.New("Cannot recursively store scalar type")
 var ErrTagFirstSlash = errors.New("Structure field tag cannot start with /")
-var ErrFindMapWrongType = errors.New("Provided map key field is of wrong type")
+var ErrFindKeyWrongType = errors.New("Provided map key field is of wrong type")
 
 // State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {
@@ -252,7 +253,7 @@ func findByFieldsMap(o objectPath, fields []interface{}, opt findOptions) (objec
 	key_type := o.vtype.Key()
 	key := reflect.ValueOf(fields[0])
 	if key.Type() != key_type {
-		return o, nil, ErrFindMapWrongType
+		return o, nil, ErrFindKeyWrongType
 	}
 
 	keystr, err := serializeMapKey(key)
@@ -484,6 +485,9 @@ func Encode(format string, object interface{}, fields ...interface{}) (map[strin
 	o, _, err := findByFields(o, fields, findOptions{})
 	if err != nil {
 		return nil, err
+	}
+	if !o.value.IsValid() {
+		return nil, ErrFindObjectNotFound
 	}
 
 	state := &encodeState{
