@@ -14,6 +14,8 @@ var ErrNoMoreFields = errors.New("No more fields to consume")
 var ErrNotAStruct = errors.New("Object is not a structure")
 var ErrNotAMap = errors.New("Object is not an array")
 var ErrNotAString = errors.New("Object is not a string")
+var ErrNotAnInt = errors.New("Object is not an integer")
+var ErrNotABool = errors.New("Object is not a bool")
 var ErrKeyMustPtr = errors.New("Provided key must be a pointer")
 var ErrWrongKeyType = errors.New("Provided key pointer type mismatch")
 var ErrNotThisPath = errors.New("The modified object is not on this path")
@@ -147,6 +149,17 @@ func (se SyncEvent) Int() (int, error) {
 		return 0, ErrNotAString
 	}
 	return i, nil
+}
+
+func (se SyncEvent) Bool() (bool, error) {
+	if se.err != nil {
+		return false, se.err
+	}
+	b, ok := se.current_object.Interface().(bool)
+	if !ok {
+		return false, ErrNotAString
+	}
+	return b, nil
 }
 
 func (se SyncEvent) derefPointers() SyncEvent {
