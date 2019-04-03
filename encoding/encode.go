@@ -393,6 +393,44 @@ func findByFieldsRevertAddressable(o objectPath, fields []interface{}, opt findO
 	return findByFieldsMap(o, fields, opt)
 }
 
+func findByFieldsSetMaybe(o objectPath, fields []interface{}, opt findOptions) (objectPath, error) {
+	// If no set is needed, return ok
+	if opt.SetObject == nil && opt.SetValue == nil {
+		return o, nil
+	}
+
+	// Can only set if the value exists (opt.Create should be set if intent is to create too)
+	if !o.value.IsValid() {
+		return o, ErrFindSetNoExists
+	}
+
+	// If object cannot be set, try to rollback
+	if !o.value.CanSet() {
+		return findByFieldsRevertAddressable(o, fields, opt)
+	}
+
+	var value reflect.Value
+	var err error
+	// If set by string, parse the string
+	if opt.SetObject == nil {
+		value, err = unserializeValue(*opt.SetValue, o.vtype)
+		if err != nil {
+			return o, err
+		}
+	} else {
+		value = reflect.ValueOf(opt.SetObject)
+	}
+
+	// Check the type
+	if value.Type() != o.vtype {
+		return o, ErrFindSetWrongType
+	}
+
+	// Set the value
+	o.value.Set(value)
+	return o, nil
+}
+
 // Goes directely down an object
 func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPath, error) {
 	// First we always dereference pointers, even though the value may become invalid
@@ -409,7 +447,7 @@ func findByFields(o objectPath, fields []interface{}, opt findOptions) (objectPa
 
 	if len(fields) == 0 {
 		// This is the end of the journey, buddy.
-		return o, nil
+		return findByFieldsSetMaybe(o, fields, opt)
 	}
 
 	if len(o.format) == 0 {
@@ -799,4 +837,23 @@ func UpdateKeyObject(object interface{}, format string, keypath string, value st
 	}
 
 	return o.fields, nil
+}
+
+func SetByFields(object interface{}, format string, value interface{}, fields ...interface{}) error {
+	o := objectPath{
+		value:  reflect.ValueOf(object),
+		vtype:  reflect.TypeOf(object),
+		format: strings.Split(format, "/"),
+	}
+
+	opt := findOptions{
+		Create:    true,
+		SetObject: value,
+	}
+	_, err := findByFields(o, fields, opt)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

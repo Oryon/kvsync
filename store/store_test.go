@@ -67,3 +67,49 @@ func TestStore(t *testing.T) {
 	//testEncode(t, "/here", &o, c)
 
 }
+
+func testSet(t *testing.T, gm *gomap.Gomap, obj interface{}, format string, val interface{}, truth map[string]string, err error, fields ...interface{}) {
+	e := Set(gm, context.Background(), obj, format, val, fields...)
+	if e != err {
+		fmt.Printf("FAIL::::: Set returned %v\n", e)
+		t.Errorf("Set returned %v", e)
+	}
+	if !reflect.DeepEqual(truth, gm.GetBackingMap()) {
+		fmt.Printf("FAIL::::: Incorrect return %v (should be %v)\n", gm.GetBackingMap(), truth)
+		t.Errorf("Incorrect return %v (should be %v)", gm.GetBackingMap(), truth)
+	}
+}
+
+func TestSet(t *testing.T) {
+	gm := gomap.Create()
+	st := S2{}
+
+	setter := S2{}
+
+	m := make(map[string]string)
+
+	m["/here/B"] = ""
+	m["/here/S/A"] = "0"
+	testSet(t, gm, &st, "/here/", setter, m, nil)
+
+	setter.B = "test"
+	m["/here/B"] = "test"
+	testSet(t, gm, &st, "/here/", setter, m, nil)
+
+	m["/here/B"] = "test2"
+	testSet(t, gm, &st, "/here/", "test2", m, nil, "B")
+	testSet(t, gm, &st, "/here/", 10, m, encoding.ErrFindSetWrongType, "B")
+
+	setter1 := S1{A: 10}
+	m["/here/S/A"] = "10"
+	testSet(t, gm, &st, "/here/", setter1, m, nil, "S")
+	testSet(t, gm, &st, "/here/", 10, m, encoding.ErrFindSetWrongType, "S")
+
+	m["/here/S/A"] = "12"
+	testSet(t, gm, &st, "/here/", 12, m, nil, "S", "A")
+	testSet(t, gm, &st, "/here/", "str", m, encoding.ErrFindSetWrongType, "S", "A")
+
+	m["/here/map/2/s1/A"] = "14"
+	testSet(t, gm, &st, "/here/", 14, m, nil, "M", 2, "A")
+	testSet(t, gm, &st, "/here/", "str", m, encoding.ErrFindSetWrongType, "M", 2, "A")
+}

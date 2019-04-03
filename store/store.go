@@ -25,6 +25,18 @@ func Store(s kvs.Store, c context.Context, object interface{}, format string, fi
 	return nil
 }
 
+// Set a value and store it into the KV store
+func Set(s kvs.Store, c context.Context, object interface{}, format string, value interface{}, fields ...interface{}) error {
+
+	err := encoding.SetByFields(object, format, value, fields...)
+	if err != nil {
+		return err
+	}
+
+	Store(s, c, object, format, fields...)
+	return nil
+}
+
 // Deletes a part of an object in the KV Store
 func Delete(s kvs.Store, c context.Context, key string, object interface{}, fields ...interface{}) error {
 	return ErrNotImplemented
