@@ -23,13 +23,12 @@ import (
 )
 
 type Etcd struct {
-	directory        string
-	kapi             client.KeysAPI
-	listing          *client.Response
-	nextListingIndex int
-	lastEtcdIndex    uint64
-	watcher          client.Watcher
-	err              error
+	directory     string
+	kapi          client.KeysAPI
+	listing       []*client.Node
+	lastEtcdIndex uint64
+	watcher       client.Watcher
+	err           error
 }
 
 func CreateFromKeysAPI(kapi client.KeysAPI, directory string) (*Etcd, error) {
@@ -95,27 +94,28 @@ func (etcd *Etcd) Next(c context.Context) (*kvs.Update, error) {
 	}
 
 	if etcd.watcher == nil {
-		l, err := etcd.kapi.Get(c, etcd.directory, nil)
-		etcd.listing = l
-
+		l, err := etcd.kapi.Get(c, etcd.directory, &client.GetOptions{Recursive: true})
 		if err != nil {
 			etcd.err = err
 			return nil, err
 		}
+		etcd.listing = append(etcd.listing, l.Node)
 
 		etcd.watcher = etcd.kapi.Watcher(etcd.directory, &client.WatcherOptions{Recursive: true, AfterIndex: etcd.lastEtcdIndex})
 
-		etcd.lastEtcdIndex = etcd.listing.Index
+		etcd.lastEtcdIndex = l.Index
 	}
 
-	if etcd.listing != nil {
-		if etcd.listing.Node != nil && etcd.nextListingIndex < len(etcd.listing.Node.Nodes) {
-			n := etcd.listing.Node.Nodes[etcd.nextListingIndex]
-			e := &kvs.Update{Key: n.Key, Value: &n.Value}
-			etcd.nextListingIndex += 1
-			return e, nil
+	for len(etcd.listing) != 0 {
+		if etcd.listing[0].Dir {
+			etcd.listing = append(etcd.listing, etcd.listing[0].Nodes...) // Append childrens
+			etcd.listing = etcd.listing[1:]                               // Remove first
+			continue
 		} else {
-			etcd.listing = nil
+			n := etcd.listing[0]
+			etcd.listing = etcd.listing[1:]
+			e := &kvs.Update{Key: n.Key, Value: &n.Value}
+			return e, nil
 		}
 	}
 
