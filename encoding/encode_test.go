@@ -513,22 +513,25 @@ func TestSetByFields(t *testing.T) {
 		t.Errorf("Invalid value")
 	}
 
-	err = DeleteByFields(&s, "/la/", "M")
+	err, k := DeleteByFields(&s, "/la/", "M")
 	if err != ErrNotMapIndex {
 		t.Errorf("Cannot delete Map object")
 	}
 
-	err = DeleteByFields(&s, "/la/", "M", 10)
+	err, k = DeleteByFields(&s, "/la/", "M", 10)
 	if err != ErrFindKeyWrongType {
 		t.Errorf("Cannot delete Map object")
 	}
 
-	err = DeleteByFields(&s, "/la/", "M", "test")
+	err, k = DeleteByFields(&s, "/la/", "M", "test")
 	if err != nil {
 		t.Errorf("DeleteByFields error %v", err)
 	}
 	_, ok = s.M["test"]
 	if ok {
 		t.Errorf("Key should not exist")
+	}
+	if k != "/la/M/test/" {
+		t.Errorf("Invalid delete key %v", k)
 	}
 }

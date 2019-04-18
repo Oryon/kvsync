@@ -876,9 +876,10 @@ func SetByFields(object interface{}, format string, value interface{}, fields ..
 
 // Deletes an element from a map, which means the last element from the fields
 // list must be a key, and the previous fields must reference a map object.
-func DeleteByFields(object interface{}, format string, fields ...interface{}) error {
+// Returns an error, or nil and the format string of the removed object
+func DeleteByFields(object interface{}, format string, fields ...interface{}) (error, string) {
 	if len(fields) < 1 {
-		return ErrNotMapIndex
+		return ErrNotMapIndex, ""
 	}
 
 	o := objectPath{
@@ -890,26 +891,29 @@ func DeleteByFields(object interface{}, format string, fields ...interface{}) er
 	opt := findOptions{}
 	o, err := findByFields(o, fields[0:len(fields)-1], opt)
 	if err != nil {
-		return err
+		return err, ""
 	}
 
-	if !o.value.IsValid() {
-		return ErrFindObjectNotFound
+	if o.vtype.Kind() != reflect.Map {
+		return ErrNotMapIndex, ""
 	}
 
-	if o.value.Kind() != reflect.Map {
-		return ErrNotMapIndex
+	o2, err := findByFields(o, fields[len(fields)-1:], opt)
+	if err != nil {
+		return err, ""
+	}
+
+	if !o2.value.IsValid() {
+		return ErrFindObjectNotFound, ""
 	}
 
 	key := reflect.ValueOf(fields[len(fields)-1])
-	if key.Type() != o.vtype.Key() {
-		return ErrFindKeyWrongType
-	}
-
-	if !o.value.MapIndex(key).IsValid() {
-		return ErrFindObjectNotFound
-	}
-
 	o.value.SetMapIndex(key, reflect.ValueOf(nil))
-	return nil
+
+	keypath := strings.Join(o2.keypath, "/")
+	if len(o2.format) != 0 { //More subkeys
+		keypath = keypath + "/"
+	}
+
+	return nil, keypath
 }
