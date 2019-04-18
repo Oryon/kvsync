@@ -38,6 +38,7 @@ var ErrFindSetWrongType = errors.New("The provided object is of wrong type")
 var ErrScalarType = errors.New("Cannot recursively store scalar type")
 var ErrTagFirstSlash = errors.New("Structure field tag cannot start with /")
 var ErrFindKeyWrongType = errors.New("Provided map key field is of wrong type")
+var ErrNotMapIndex = errors.New("Specified object if not a map index")
 
 // State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {
@@ -870,5 +871,45 @@ func SetByFields(object interface{}, format string, value interface{}, fields ..
 		return err
 	}
 
+	return nil
+}
+
+// Deletes an element from a map, which means the last element from the fields
+// list must be a key, and the previous fields must reference a map object.
+func DeleteByFields(object interface{}, format string, fields ...interface{}) error {
+	if len(fields) < 1 {
+		return ErrNotMapIndex
+	}
+
+	o := objectPath{
+		value:  reflect.ValueOf(object),
+		vtype:  reflect.TypeOf(object),
+		format: strings.Split(format, "/"),
+	}
+
+	opt := findOptions{}
+	o, err := findByFields(o, fields[0:len(fields)-1], opt)
+	if err != nil {
+		return err
+	}
+
+	if !o.value.IsValid() {
+		return ErrFindObjectNotFound
+	}
+
+	if o.value.Kind() != reflect.Map {
+		return ErrNotMapIndex
+	}
+
+	key := reflect.ValueOf(fields[len(fields)-1])
+	if key.Type() != o.vtype.Key() {
+		return ErrFindKeyWrongType
+	}
+
+	if !o.value.MapIndex(key).IsValid() {
+		return ErrFindObjectNotFound
+	}
+
+	o.value.SetMapIndex(key, reflect.ValueOf(nil))
 	return nil
 }

@@ -52,7 +52,8 @@ func Set(s kvs.Store, c context.Context, object interface{}, format string, valu
 	return nil
 }
 
-// Deletes a part of an object in the KV Store
-func Delete(s kvs.Store, c context.Context, key string, object interface{}, fields ...interface{}) error {
-	return ErrNotImplemented
+// Deletes a part of an object in the KV Store and push the change to the underlying KVStore
+func Delete(s kvs.Store, c context.Context, format string, object interface{}, fields ...interface{}) error {
+	err := encoding.DeleteByFields(object, format, fields)
+	return err
 }

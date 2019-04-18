@@ -488,3 +488,47 @@ func TestFindByFieldsBasic(t *testing.T) {
 	}
 
 }
+
+type S10 struct {
+	A int
+}
+
+type S11 struct {
+	M map[string]S10 `kvs:"M/{key}/"`
+}
+
+func TestSetByFields(t *testing.T) {
+
+	s := S11{}
+
+	err := SetByFields(&s, "/la/", 10, "M", "test", "A")
+	if err != nil {
+		t.Errorf("SetByFields error %v", err)
+	}
+	q, ok := s.M["test"]
+	if !ok {
+		t.Errorf("Could not find key")
+	}
+	if q.A != 10 {
+		t.Errorf("Invalid value")
+	}
+
+	err = DeleteByFields(&s, "/la/", "M")
+	if err != ErrNotMapIndex {
+		t.Errorf("Cannot delete Map object")
+	}
+
+	err = DeleteByFields(&s, "/la/", "M", 10)
+	if err != ErrFindKeyWrongType {
+		t.Errorf("Cannot delete Map object")
+	}
+
+	err = DeleteByFields(&s, "/la/", "M", "test")
+	if err != nil {
+		t.Errorf("DeleteByFields error %v", err)
+	}
+	_, ok = s.M["test"]
+	if ok {
+		t.Errorf("Key should not exist")
+	}
+}
