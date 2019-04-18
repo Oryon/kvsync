@@ -133,6 +133,15 @@ func (se SyncEvent) GetIndex(index *int) SyncEvent {
 	return se
 }
 
+// Returns whether the currently considered object was actually deleted.
+func (se SyncEvent) IsDeleted(deleted *bool) SyncEvent {
+	if !se.current_object.IsValid() && len(se.fields) == 0 {
+		*deleted = true
+		return se
+	}
+	return se
+}
+
 func (se SyncEvent) Error() error {
 	return se.err
 }
@@ -211,7 +220,27 @@ func (s *Sync) Next(c context.Context) error {
 		return err
 	}
 
-	// FIXME: Hack for now as delete is not supported
+	if e.Value == nil {
+		// First try to remove as map object
+		for _, v := range s.objects {
+			k := e.Key
+			if e.Key[len(e.Key)-1] == '/' {
+				k = e.Key[:len(e.Key)-1]
+			}
+			fields, err := encoding.DeleteKeyObject(v.Object, v.Format, k)
+			if err != nil {
+				continue
+			}
+			event := SyncEvent{
+				current_object: reflect.ValueOf(v.Object),
+				fields:         fields,
+			}
+			v.Callback(&event)
+			return nil
+		}
+	}
+
+	// This is a hack since some objects cannot be deleted properly for now
 	es := ""
 	if e.Value == nil {
 		e.Value = &es

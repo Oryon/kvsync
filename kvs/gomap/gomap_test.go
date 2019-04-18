@@ -126,18 +126,17 @@ func TestInit(t *testing.T) {
 	if e == nil {
 		t.Error("Should have returned error")
 	}
-
+	r := "a/"
 	expected = []kvs.Update{
-		{Key: ck[0], Value: nil, Previous: &cv[0]},
-		{Key: ck[1], Value: nil, Previous: &cv[1]},
+		{Key: "a/", Value: nil, Previous: &r},
 	}
 
 	m.Delete(c, "a/")
 	testNext(t, m, expected)
 
+	r = "b/"
 	expected = []kvs.Update{
-		{Key: ck[2], Value: nil, Previous: &cv[2]},
-		{Key: ck[3], Value: nil, Previous: &cv[3]},
+		{Key: "b/", Value: nil, Previous: &r},
 	}
 
 	m.Delete(c, "b/")

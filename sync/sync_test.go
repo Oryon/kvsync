@@ -174,4 +174,51 @@ func TestBasicNext(t *testing.T) {
 		}
 	}
 
+	err = gm.Delete(context.Background(), "/o/map/123/s1/A")
+	failIfError(t, err)
+
+	lastEvent = nil
+	s.Next(context.Background())
+	if lastEvent == nil {
+		t.Errorf("There should be an event")
+	}
+
+	if i, err := lastEvent.Field("M").Value(&intkey).Field("A").Int(); err == nil {
+		if intkey != 123 {
+			t.Errorf("Wrong key")
+		} else if i != 0 {
+			t.Errorf("Wrong value")
+		}
+	} else {
+		t.Errorf("Returned: %v", err)
+	}
+
+	err = gm.Set(context.Background(), "/o/map/123/s1/A", "6")
+	failIfError(t, err)
+
+	lastEvent = nil
+	s.Next(context.Background())
+	if lastEvent == nil {
+		t.Errorf("There should be an event")
+	}
+
+	err = gm.Delete(context.Background(), "/o/map/123/")
+	failIfError(t, err)
+
+	lastEvent = nil
+	s.Next(context.Background())
+	if lastEvent == nil {
+		t.Errorf("There should be an event")
+	}
+
+	isDeleted := false
+	if err = lastEvent.Field("M").Value(&intkey).IsDeleted(&isDeleted).Error(); err == nil {
+		if intkey != 123 {
+			t.Errorf("Wrong key")
+		} else if isDeleted == false {
+			t.Errorf("Should be deleted")
+		}
+	} else {
+		t.Errorf("Returned: %v", err)
+	}
 }

@@ -79,10 +79,11 @@ func (m *Gomap) Delete(c context.Context, key string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	var us []kvs.Update
 	found := false
 
 	if key[len(key)-1] == '/' {
+		var us []kvs.Update
+
 		for k, v := range m.gomap {
 			if strings.HasPrefix(k, key) {
 				s := string(v)
@@ -98,6 +99,17 @@ func (m *Gomap) Delete(c context.Context, key string) error {
 		if !found {
 			return fmt.Errorf("Key '%s' is not in map", key)
 		}
+		u := kvs.Update{
+			Key:      key,
+			Value:    nil,
+			Previous: &key,
+		}
+		m.queue = append(m.queue, u)
+
+		for _, u := range us {
+			delete(m.gomap, u.Key)
+		}
+
 	} else {
 		s, ok := m.gomap[key]
 		if !ok {
@@ -108,12 +120,8 @@ func (m *Gomap) Delete(c context.Context, key string) error {
 			Value:    nil,
 			Previous: &s,
 		}
-		us = append(us, u)
-	}
-
-	for _, u := range us {
-		m.queue = append(m.queue, u)
 		delete(m.gomap, u.Key)
+		m.queue = append(m.queue, u)
 	}
 
 	return nil

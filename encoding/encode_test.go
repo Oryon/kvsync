@@ -255,8 +255,7 @@ func TestFindByKey0(t *testing.T) {
 	failIfError(t, err)
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 	o, fields, err = FindByKey(&s, "", "map1/testkey")
-	failIfErrorDifferent(t, err, ErrFindPathNotFound)
-
+	failIfErrorDifferent(t, err, ErrFindKeyInvalid)
 	o, fields, err = FindByKey(&s, "", "map1/testkey/")
 	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
@@ -269,7 +268,7 @@ func TestFindByKey0(t *testing.T) {
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey")
-	failIfErrorDifferent(t, err, ErrFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindKeyInvalid)
 	o, fields, err = FindByKey(&s, "", "map1/testkey/")
 	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
@@ -283,13 +282,13 @@ func TestFindByKey0(t *testing.T) {
 	testFindByKeyResult(t, o, fields, &s.C, []interface{}{"C"})
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey")
-	failIfErrorDifferent(t, err, ErrFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindKeyInvalid)
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey/")
 	failIfErrorDifferent(t, err, ErrFindPathNotFound)
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey/in")
-	failIfErrorDifferent(t, err, ErrFindPathNotFound)
+	failIfErrorDifferent(t, err, ErrFindKeyInvalid)
 
 	o, fields, err = FindByKey(&s, "", "map1/testkey/in/here")
 	failIfError(t, err)

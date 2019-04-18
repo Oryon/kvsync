@@ -87,6 +87,10 @@ type findOptions struct {
 	// When non-nil, sets the searched object by serializing the string into the searched object.
 	SetValue *string
 
+	// If Create and SetValue are set, and the provided string fails unmarshaling,
+	// the default value is used instead.
+	IgnoreUnmarshalFailure bool
+
 	// When non-nil, sets the searched object with the given value.
 	SetObject interface{}
 
@@ -431,7 +435,11 @@ func findByFieldsSetMaybe(o objectPath, fields []interface{}, opt findOptions) (
 	if opt.SetObject == nil {
 		value, err = unserializeValue(*opt.SetValue, o.vtype)
 		if err != nil {
-			return o, err
+			if opt.IgnoreUnmarshalFailure {
+				value = reflect.New(o.vtype)
+			} else {
+				return o, err
+			}
 		}
 	} else {
 		value = reflect.ValueOf(opt.SetObject)
@@ -691,7 +699,10 @@ func findByKeyFormat(o objectPath, path []string) (objectPath, []string, error) 
 		} else if o.format[0] == "{key}" || o.format[0] == "{index}" {
 			//We stop here and can format a map, array or slice element
 			break
-		} else if len(path) == 0 || o.format[0] != path[0] {
+		} else if len(path) == 0 {
+			// We are going to stop now
+			break
+		} else if o.format[0] != path[0] {
 			// Provided path does not match the expected format
 			return o, path, ErrFindPathNotFound
 		} else {
@@ -739,7 +750,11 @@ func findByKeySetMaybe(o objectPath, path []string, opt findOptions) (objectPath
 	if opt.SetObject == nil {
 		value, err = unserializeValue(*opt.SetValue, o.vtype)
 		if err != nil {
-			return o, err
+			if opt.IgnoreUnmarshalFailure {
+				value = reflect.New(o.vtype).Elem()
+			} else {
+				return o, err
+			}
 		}
 	} else {
 		value = reflect.ValueOf(opt.SetObject).Elem()
@@ -844,8 +859,9 @@ func UpdateKeyObject(object interface{}, format string, keypath string, value st
 		format: strings.Split(format, "/"),
 	}
 	opt := findOptions{
-		Create:   true,
-		SetValue: &value,
+		Create:                 true,
+		SetValue:               &value,
+		IgnoreUnmarshalFailure: true,
 	}
 	o, err := findByKey(o, strings.Split(keypath, "/"), opt)
 	if err != nil {
@@ -853,6 +869,26 @@ func UpdateKeyObject(object interface{}, format string, keypath string, value st
 	}
 
 	return o.fields, nil
+}
+
+func DeleteKeyObject(object interface{}, format string, keypath string) ([]interface{}, error) {
+	o := objectPath{
+		value:  reflect.ValueOf(object),
+		vtype:  reflect.TypeOf(object),
+		format: strings.Split(format, "/"),
+	}
+
+	opt := findOptions{}
+	path := strings.Split(keypath, "/")
+
+	o, err := findByKey(o, path, opt)
+	if err != nil && err != ErrFindKeyInvalid {
+		// Getting ErrFindKeyInvalid means the key does not represent an encoded value, which is ok in this case
+		return nil, err
+	}
+
+	err, _ = DeleteByFields(object, format, o.fields...)
+	return o.fields, err
 }
 
 func SetByFields(object interface{}, format string, value interface{}, fields ...interface{}) error {
