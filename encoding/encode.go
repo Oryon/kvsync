@@ -38,7 +38,7 @@ var ErrFindSetWrongType = errors.New("The provided object is of wrong type")
 var ErrScalarType = errors.New("Cannot recursively store scalar type")
 var ErrTagFirstSlash = errors.New("Structure field tag cannot start with /")
 var ErrFindKeyWrongType = errors.New("Provided map key field is of wrong type")
-var ErrNotMapIndex = errors.New("Specified object if not a map index")
+var ErrNotMapIndex = errors.New("Specified object is not a map index")
 
 // State storing keys and values before they get stored for one or multiple objects
 type encodeState struct {

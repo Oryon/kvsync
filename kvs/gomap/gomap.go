@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Oryon/kvsync/kvs"
+	"strings"
 	"sync"
 )
 
@@ -78,20 +79,43 @@ func (m *Gomap) Delete(c context.Context, key string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	s, ok := m.gomap[key]
-	if !ok {
-		return fmt.Errorf("Key '%s' is not in map", key)
+	var us []kvs.Update
+	found := false
+
+	if key[len(key)-1] == '/' {
+		for k, v := range m.gomap {
+			if strings.HasPrefix(k, key) {
+				s := string(v)
+				u := kvs.Update{
+					Key:      k,
+					Value:    nil,
+					Previous: &s,
+				}
+				us = append(us, u)
+				found = true
+			}
+		}
+		if !found {
+			return fmt.Errorf("Key '%s' is not in map", key)
+		}
+	} else {
+		s, ok := m.gomap[key]
+		if !ok {
+			return fmt.Errorf("Key '%s' is not in map", key)
+		}
+		u := kvs.Update{
+			Key:      key,
+			Value:    nil,
+			Previous: &s,
+		}
+		us = append(us, u)
 	}
 
-	u := kvs.Update{
-		Key:      key,
-		Value:    nil,
-		Previous: &s,
+	for _, u := range us {
+		m.queue = append(m.queue, u)
+		delete(m.gomap, u.Key)
 	}
 
-	delete(m.gomap, key)
-
-	m.queue = append(m.queue, u)
 	return nil
 }
 

@@ -72,7 +72,7 @@ func (etcd *Etcd) Set(c context.Context, key string, value string) error {
 }
 
 func (etcd *Etcd) Delete(c context.Context, key string) error {
-	_, err := etcd.kapi.Delete(c, key, nil)
+	_, err := etcd.kapi.Delete(c, key, &client.DeleteOptions{Recursive: true})
 	return err
 }
 

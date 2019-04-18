@@ -22,7 +22,10 @@ import (
 
 // This interface provides basic functionality to read from a Key-Value store.
 type Store interface {
+	// Sets a string value at a key position
 	Set(c context.Context, key string, value string) error
+
+	// Deletes a key, or a repertory if the key finishes with '/'
 	Delete(c context.Context, key string) error
 }
 

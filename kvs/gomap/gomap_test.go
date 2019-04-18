@@ -101,4 +101,45 @@ func TestInit(t *testing.T) {
 	if e == nil {
 		t.Error("Should have returned error")
 	}
+
+	ck = [4]string{"a/2", "a/3", "b/2", "b/3"}
+	cv = [4]string{"1", "2", "3", "4"}
+
+	expected = []kvs.Update{
+		{Key: ck[0], Value: &cv[0], Previous: nil},
+		{Key: ck[1], Value: &cv[1], Previous: nil},
+		{Key: ck[2], Value: &cv[2], Previous: nil},
+		{Key: ck[3], Value: &cv[3], Previous: nil},
+	}
+
+	for i := range ck {
+		m.Set(context.Background(), ck[i], cv[i])
+	}
+
+	testNext(t, m, expected)
+
+	m.Delete(c, "a")
+	u, e = m.Next(c)
+	if u != nil {
+		t.Error("Update should be nil")
+	}
+	if e == nil {
+		t.Error("Should have returned error")
+	}
+
+	expected = []kvs.Update{
+		{Key: ck[0], Value: nil, Previous: &cv[0]},
+		{Key: ck[1], Value: nil, Previous: &cv[1]},
+	}
+
+	m.Delete(c, "a/")
+	testNext(t, m, expected)
+
+	expected = []kvs.Update{
+		{Key: ck[2], Value: nil, Previous: &cv[2]},
+		{Key: ck[3], Value: nil, Previous: &cv[3]},
+	}
+
+	m.Delete(c, "b/")
+	testNext(t, m, expected)
 }
