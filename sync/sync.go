@@ -229,6 +229,9 @@ func (s *Sync) Next(c context.Context) error {
 			}
 			fields, err := encoding.DeleteKeyObject(v.Object, v.Format, k)
 			if err != nil {
+				if err == encoding.ErrFindObjectNotFound {
+					return err
+				}
 				continue
 			}
 			event := SyncEvent{
