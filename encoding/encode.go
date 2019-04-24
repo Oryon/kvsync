@@ -604,6 +604,12 @@ func findByKeyOneStruct(o objectPath, path []string, opt findOptions) (objectPat
 
 // Finds a sub-object inside a map with the provided object format (e.g. {key}, {key}/, {key}/name).
 func findByKeyOneMap(o objectPath, path []string, opt findOptions) (objectPath, error) {
+
+	if o.value.IsValid() && o.value.IsNil() && opt.Create && !o.value.CanSet() {
+		// Create MAP if necessary
+		return findByKeyRevertAddressable(o, path, opt)
+	}
+
 	o2 := o
 	o.lastMapIndirection = &o2
 
@@ -622,9 +628,6 @@ func findByKeyOneMap(o objectPath, path []string, opt findOptions) (objectPath, 
 	if o.value.IsValid() {
 
 		if o.value.IsNil() && opt.Create {
-			if !o.value.CanSet() {
-				return findByKeyRevertAddressable(o, path, opt)
-			}
 			n := reflect.MakeMap(o.vtype) // Create new map
 			o.value.Set(n)                // Set the pointer value to the current value
 			m = o.value

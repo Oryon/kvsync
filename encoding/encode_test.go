@@ -328,12 +328,14 @@ type S6 struct {
 	IntPtrMap map[string]*int `kvs:"IntPtrMap/{key}"`
 	IntMap    map[string]int  `kvs:"IntMap/{key}"`
 	N         int
+	StringMap map[string]string `kvs:"smap/{key}"`
 }
 
 type S7 struct {
 	I           int
-	S6PtrMap    map[string]*S6 `kvs:"s6_ptr_map/{key}/sub/"`
-	S6StructMap map[string]S6  `kvs:"s6_struct_map/{key}/sub/"`
+	S6PtrMap    map[string]*S6    `kvs:"s6_ptr_map/{key}/sub/"`
+	S6StructMap map[string]S6     `kvs:"s6_struct_map/{key}/sub/"`
+	StringMap   map[string]string `kvs:"smap/{key}"`
 }
 
 func testUpdateKeyObject(t *testing.T, object interface{}, format string, keypath string, value string, path []interface{}) {
@@ -390,6 +392,21 @@ func TestUpdateKeyObject(t *testing.T) {
 
 	testUpdateKeyObject(t, &s, "", "s6_ptr_map/ee/sub/N", "42", []interface{}{"S6PtrMap", "ee", "N"})
 	if s.S6PtrMap["ee"].N != 42 {
+		t.Errorf("Error\n")
+	}
+
+	testUpdateKeyObject(t, &s, "", "smap/key", "string-here", []interface{}{"StringMap", "key"})
+	if s.StringMap["key"] != "string-here" {
+		t.Errorf("Error\n")
+	}
+
+	testUpdateKeyObject(t, &s, "", "smap/key2", "string-here2", []interface{}{"StringMap", "key2"})
+	if s.StringMap["key2"] != "string-here2" {
+		t.Errorf("Error\n")
+	}
+
+	testUpdateKeyObject(t, &s, "", "s6_struct_map/a/sub/smap/key", "test3", []interface{}{"S6StructMap", "a", "StringMap", "key"})
+	if s.S6StructMap["a"].StringMap["key"] != "test3" {
 		t.Errorf("Error\n")
 	}
 }
