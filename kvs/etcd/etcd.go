@@ -96,14 +96,25 @@ func (etcd *Etcd) Next(c context.Context) (*kvs.Update, error) {
 	if etcd.watcher == nil {
 		l, err := etcd.kapi.Get(c, etcd.directory, &client.GetOptions{Recursive: true})
 		if err != nil {
-			etcd.err = err
-			return nil, err
+			e := err.(client.Error)
+			if e.Code != client.ErrorCodeKeyNotFound {
+				etcd.err = err
+				return nil, err
+			}
+
+			// In case etcd.directory, we still need to retrieve an index
+			l, err := etcd.kapi.Get(c, "/", nil)
+			if err != nil {
+				etcd.err = err
+				return nil, err
+			}
+			etcd.lastEtcdIndex = l.Index
+		} else {
+			etcd.listing = append(etcd.listing, l.Node)
+			etcd.lastEtcdIndex = l.Index
 		}
-		etcd.listing = append(etcd.listing, l.Node)
 
 		etcd.watcher = etcd.kapi.Watcher(etcd.directory, &client.WatcherOptions{Recursive: true, AfterIndex: etcd.lastEtcdIndex})
-
-		etcd.lastEtcdIndex = l.Index
 	}
 
 	for len(etcd.listing) != 0 {
