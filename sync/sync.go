@@ -168,11 +168,14 @@ func (se SyncEvent) Int() (int, error) {
 	if se.err != nil {
 		return 0, se.err
 	}
-	i, ok := se.current_object.Interface().(int)
-	if !ok {
+	kind := se.current_object.Kind()
+	ok := kind == reflect.Int || kind == reflect.Int8 || kind == reflect.Int16 || kind == reflect.Int32 || kind == reflect.Int64
+	if ok {
+		i := int(se.current_object.Int())
+		return i, nil
+	} else {
 		return 0, ErrNotAnInt
 	}
-	return i, nil
 }
 
 func (se SyncEvent) Bool() (bool, error) {
