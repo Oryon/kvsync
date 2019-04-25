@@ -170,7 +170,7 @@ func (se SyncEvent) Int() (int, error) {
 	}
 	i, ok := se.current_object.Interface().(int)
 	if !ok {
-		return 0, ErrNotAString
+		return 0, ErrNotAnInt
 	}
 	return i, nil
 }
@@ -181,7 +181,7 @@ func (se SyncEvent) Bool() (bool, error) {
 	}
 	b, ok := se.current_object.Interface().(bool)
 	if !ok {
-		return false, ErrNotAString
+		return false, ErrNotABool
 	}
 	return b, nil
 }
