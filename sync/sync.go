@@ -36,6 +36,7 @@ var ErrWrongKeyType = errors.New("Provided key pointer type mismatch")
 var ErrNotThisPath = errors.New("The modified object is not on this path")
 var ErrNotImplemented = errors.New("This is not implemented")
 var ErrNilPointer = errors.New("Reached nil pointer")
+var ErrIsDelete = errors.New("Object is being deleted")
 
 // SyncEvent is used to notify a change on a watched object
 // as well as diving into the changed element of the object.
@@ -150,6 +151,11 @@ func (se SyncEvent) Current() (interface{}, error) {
 	if se.err != nil {
 		return nil, se.err
 	}
+	if !se.current_object.IsValid() {
+		se.err = ErrIsDelete
+		return nil, se.err
+	}
+
 	return se.current_object.Interface(), nil
 }
 
@@ -190,6 +196,11 @@ func (se SyncEvent) Bool() (bool, error) {
 }
 
 func (se SyncEvent) derefPointers() SyncEvent {
+	if !se.current_object.IsValid() {
+		se.err = ErrIsDelete
+		return se
+	}
+
 	for se.current_object.Type().Kind() == reflect.Ptr {
 		if se.current_object.IsNil() {
 			se.err = ErrNilPointer

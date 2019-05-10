@@ -211,6 +211,11 @@ func TestBasicNext(t *testing.T) {
 		t.Errorf("There should be an event")
 	}
 
+	err = lastEvent.Field("M").Value(&intkey).Field("A").Error()
+	if err != ErrIsDelete {
+		t.Errorf("Object is being deleted")
+	}
+
 	isDeleted := false
 	if err = lastEvent.Field("M").Value(&intkey).IsDeleted(&isDeleted).Error(); err == nil {
 		if intkey != 123 {
@@ -221,4 +226,5 @@ func TestBasicNext(t *testing.T) {
 	} else {
 		t.Errorf("Returned: %v", err)
 	}
+
 }
