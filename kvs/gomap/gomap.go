@@ -50,6 +50,14 @@ func Create() *Gomap {
 	return CreateFromExistingMap(make(map[string]string))
 }
 
+func (m *Gomap) Lock() error {
+	m.mutex.Lock()
+}
+
+func (m *Gomap) Unlock() error {
+	m.mutex.Unlock()
+}
+
 func (m *Gomap) Set(c context.Context, key string, value string) error {
 	u := kvs.Update{
 		Key:      key,

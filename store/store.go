@@ -42,8 +42,10 @@ func Store(s kvs.Store, c context.Context, object interface{}, format string, fi
 
 // Set a value and store it into the KV store
 func Set(s kvs.Store, c context.Context, object interface{}, format string, value interface{}, fields ...interface{}) error {
+	s.Lock()
 
 	err := encoding.SetByFields(object, format, value, fields...)
+	s.Unlock()
 	if err != nil {
 		return err
 	}
@@ -54,7 +56,10 @@ func Set(s kvs.Store, c context.Context, object interface{}, format string, valu
 
 // Deletes a part of an object in the KV Store and push the change to the underlying KVStore
 func Delete(s kvs.Store, c context.Context, object interface{}, format string, fields ...interface{}) error {
+	s.Lock()
+
 	err, key := encoding.DeleteByFields(object, format, fields...)
+	s.Unlock()
 	if err != nil {
 		return err
 	}

@@ -19,6 +19,7 @@ import (
 	"context"
 	"github.com/Oryon/kvsync/kvs"
 	"go.etcd.io/etcd/client"
+	"sync"
 	"time"
 )
 
@@ -29,6 +30,7 @@ type Etcd struct {
 	lastEtcdIndex uint64
 	watcher       client.Watcher
 	err           error
+	mux           sync.Mutex
 }
 
 func CreateFromKeysAPI(kapi client.KeysAPI, directory string) (*Etcd, error) {
@@ -64,6 +66,14 @@ func CreateFromEndpoint(etcdEndpoint string, directory string) (*Etcd, error) {
 	}
 
 	return CreateFromConfig(cfg, directory)
+}
+
+func (etcd *Etcd) Lock() error {
+	etcd.mux.Lock()
+}
+
+func (etcd *Etcd) Unlock() error {
+	etcd.mux.Unlock()
 }
 
 func (etcd *Etcd) Set(c context.Context, key string, value string) error {
