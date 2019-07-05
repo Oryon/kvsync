@@ -68,11 +68,11 @@ func CreateFromEndpoint(etcdEndpoint string, directory string) (*Etcd, error) {
 	return CreateFromConfig(cfg, directory)
 }
 
-func (etcd *Etcd) Lock() error {
+func (etcd *Etcd) Lock() {
 	etcd.mux.Lock()
 }
 
-func (etcd *Etcd) Unlock() error {
+func (etcd *Etcd) Unlock() {
 	etcd.mux.Unlock()
 }
 

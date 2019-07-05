@@ -50,11 +50,11 @@ func Create() *Gomap {
 	return CreateFromExistingMap(make(map[string]string))
 }
 
-func (m *Gomap) Lock() error {
+func (m *Gomap) Lock() {
 	m.mutex.Lock()
 }
 
-func (m *Gomap) Unlock() error {
+func (m *Gomap) Unlock() {
 	m.mutex.Unlock()
 }
 
