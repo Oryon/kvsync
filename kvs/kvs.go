@@ -27,6 +27,12 @@ type Store interface {
 
 	// Deletes a key, or a repertory if the key finishes with '/'
 	Delete(c context.Context, key string) error
+	
+	// Lock the underlying object for write access
+	Lock()
+	
+	// Unlock the underlying object for write access
+	Unlock()
 }
 
 // This struct contains a Key-Value pair update.
