@@ -4,7 +4,7 @@ The *kvsync* is a Go library, providing a simple and flexible way to *set*, *get
 
 ## Storage Format
 
-All the Go types, such as `int` and `string`, but also `struct` fields or `map` are stored as key-value pairs.
+Go types, such as `int` and `string`, but also `struct` fields or `map` are stored as key-value pairs.
 
 Basic types like `int` and `string` are stored as a single key-value pair, while more complex types like `struct` or `map` can either be stored as JSON-encoded data, or be split into multiple key-value pairs.
 
@@ -12,7 +12,7 @@ The *kvsync* library simplifies the mapping between Go types and key-value pairs
 
 ### Basics
 
-Any object, when stored, synced or retrieved, is associated with a **format**. The **format** is defined as `string`) slash-separated path, specifying the following:
+Any object, when stored, synced or retrieved, is associated with a **format**. The **format** is defined as `string` slash-separated path, specifying the following:
 
 - **Where** to store the object 
 - **How** to store the object or its attributes (e.g. *struct fields*, *map keys* or *map values*)
