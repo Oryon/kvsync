@@ -21,7 +21,7 @@ For example, an object with format `/store/here`, would be stored as JSON at key
 
 ### Storing Structs
 
-For `struct` types, adding an additional `/`, results each of  struct's fields is stored as different object. Such objects are either stored as JSON (using format `<parent-format>/<attribute-name>`), or using a custom format, which can be specified by *struct tags*.
+For `struct` types, adding an additional `/`, results in storing each of struct's fields as different object. Such objects are either stored as JSON (using format `<parent-format>/<attribute-name>`), or using a custom format, which can be specified by *struct tags*.
 
 For example, considering the following struct:
 
