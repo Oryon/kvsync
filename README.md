@@ -33,7 +33,7 @@ type Person struct {
 }
 ```
 
-Storing `Person` with format `/store/here/` (notice the trailing `/`) would result in storing:
+Storing `Person` with format `/store/here/` (notice the trailing `/` indicating recursive storage) would result in storing fields:
 
 - `Age` at key `/store/here/Age` (default behavior)
 - `Name` at key `/store/here/custom/path/to/name`
@@ -58,7 +58,7 @@ As with other objects, storing/syncing/retrieving a `map` with format `/store/ma
 
 By appending `/{key}<element-format>` to the format, each of `map` values gets stored using format `<map-format>/{key}<element-format>`, where the `{key}` part is replaced with a map key.
 
-For instance, using format `/map/here/{key}`, element in `mymap["42"]` would be stored as JSON at key `/map/here/42`, whereas using format `/map/here/{key}/` would recursively store the map value with at key `/map/here/42/`.
+For instance, using format `/map/here/{key}`, element in `mymap["42"]` would be stored as JSON at key `/map/here/42`, whereas using format `/map/here/{key}/` would recursively store the map value at key `/map/here/42/`.
 
 
 ## Change Notifications
@@ -75,6 +75,6 @@ type Directory struct {
 
 Synchronizing such an object with format `/root/here/there/dir/`, when `Name` of some student gets modified, would notify callback that the `Directory` object was modified at path `{"Students", 42, "Person", "Name"}`.
 
-This approach will let you filter notifications very efficiently, without having to worry about the actual keys that are used in the key-value store.
+This approach will let you filter callbacks very efficiently, without having to worry about the actual keys that are used in the key-value store.
 
-Notice that, for map keys, the key field uses the *native* type `int`, which avoids having to parse a string into the proper type!
+Notice that, for map keys, the key field uses the *native* type, which avoids having to parse a string into the proper type!
